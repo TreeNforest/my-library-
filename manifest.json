@@ -2,10 +2,11 @@
   "name": "我的書房",
   "short_name": "書房",
   "description": "讀書、觀劇、演出紀錄",
-  "start_url": "/my-library-/",
+  "start_url": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#f5f2ee",
+  "scope": "/my-library-/",
   "theme_color": "#f5f2ee",
   "icons": [
     {
