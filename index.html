@@ -1510,6 +1510,7 @@ function BookForm({ book, onClose, onSave }) {
     coverUrl: book?.coverUrl || '',
     status:      book?.status      || 'unread',
     purchasePrice: book?.purchasePrice !== undefined ? String(book.purchasePrice) : '',
+    purchaseDate:  book?.purchaseDate  || '',
     publisher:   book?.publisher   || '',
     originalTitle: book?.originalTitle || '',
     language:    book?.language    || '',
@@ -1546,6 +1547,7 @@ function BookForm({ book, onClose, onSave }) {
         coverUrl:    form.coverUrl,
         status:      form.status,
         purchasePrice: form.purchasePrice !== '' ? parseFloat(form.purchasePrice) : null,
+        purchaseDate:  form.purchaseDate,
         publisher:   form.publisher,
         originalTitle: form.originalTitle,
         language:    form.language,
@@ -1610,10 +1612,14 @@ function BookForm({ book, onClose, onSave }) {
           React.createElement('label', null, '書籍介紹'),
           React.createElement('textarea', { className: 'form-textarea', value: form.description, onChange: set('description'), placeholder: '簡介這本書的內容…', style: { minHeight: '80px' } })
         ),
-        /* purchasePrice */
+        /* purchase info */
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '購買金額'),
           React.createElement('input', { className: 'form-input', type: 'number', value: form.purchasePrice, onChange: set('purchasePrice'), placeholder: '0', min: 0 })
+        ),
+        React.createElement('div', { className: 'form-group' },
+          React.createElement('label', null, '購買日期'),
+          React.createElement('input', { className: 'form-input', type: 'date', value: form.purchaseDate, onChange: set('purchaseDate') })
         ),
         /* format */
         React.createElement('div', { className: 'form-group full' },
@@ -1717,6 +1723,7 @@ function BookDetail({ book, onClose, onEdit, onAuthor }) {
               book.category && { label: '分類', value: book.category },
               book.dateRead && { label: '閱讀日期', value: book.dateRead },
               book.purchasePrice && { label: '購買金額', value: `$${book.purchasePrice}` },
+              book.purchaseDate  && { label: '購買日期',  value: book.purchaseDate },
               book.publisher && { label: '出版社', value: book.publisher },
               book.language  && { label: '語言', value: book.language },
               book.format    && { label: '版本', value: book.format === 'paper' ? '📄 紙本' : '📱 電子書' },
@@ -2913,6 +2920,211 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
   );
 }
 
+/* ── WishlistPage ── */
+function WishlistPage({ db, showToast, books, externalShowForm, onExternalFormClose }) {
+  const [wishItems, setWishItems]   = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [showForm, setShowForm]     = useState(false);
+  const [editItem, setEditItem]     = useState(null);
+  const [moving, setMoving]         = useState(null);
+
+  useEffect(() => { if (externalShowForm) { setShowForm(true); onExternalFormClose(); } }, [externalShowForm]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'wishlist'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, snap => {
+      setWishItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, () => setLoading(false));
+    return unsub;
+  }, []);
+
+  const handleSave = async (item, data, del) => {
+    if (del) { await deleteDoc(doc(db, 'wishlist', item.id)); showToast('已刪除'); return; }
+    if (item) { await updateDoc(doc(db, 'wishlist', item.id), data); showToast('已更新'); }
+    else { await addDoc(collection(db, 'wishlist'), data); showToast('已加入願望清單'); }
+  };
+
+  const handleMoveToShelf = async item => {
+    if (!confirm(`將《${item.title}》移入書架？`)) return;
+    setMoving(item.id);
+    await addDoc(collection(db, 'books'), {
+      title:    item.title,
+      author:   item.author   || '',
+      category: item.category || '',
+      coverUrl: item.coverUrl || '',
+      status:   'unread',
+      purchasePrice: item.price || null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    await deleteDoc(doc(db, 'wishlist', item.id));
+    showToast('已移入書架！');
+    setMoving(null);
+  };
+
+  /* ── Stats: yearly/monthly spending from books ── */
+  const boughtBooks = books.filter(b => b.purchasePrice > 0 && b.purchaseDate);
+  const years = [...new Set(boughtBooks.map(b => b.purchaseDate.slice(0,4)))].sort((a,b) => b-a);
+  const [selYear, setSelYear] = useState(null);
+  const curYear = selYear || (years[0] || String(new Date().getFullYear()));
+  const yearBooks = boughtBooks.filter(b => b.purchaseDate.startsWith(curYear));
+  const yearTotal = yearBooks.reduce((s, b) => s + (b.purchasePrice || 0), 0);
+  const monthMap = {};
+  yearBooks.forEach(b => {
+    const m = b.purchaseDate.slice(0,7);
+    if (!monthMap[m]) monthMap[m] = { total: 0, books: [] };
+    monthMap[m].total += b.purchasePrice || 0;
+    monthMap[m].books.push(b);
+  });
+  const months = Object.entries(monthMap).sort((a,b) => b[0].localeCompare(a[0]));
+
+  const WishForm = ({ item, onClose }) => {
+    const [form, setForm] = useState({
+      title:    item?.title    || '',
+      author:   item?.author   || '',
+      category: item?.category || '',
+      price:    item?.price !== undefined ? String(item.price) : '',
+      coverUrl: item?.coverUrl || '',
+    });
+    const [saving, setSaving] = useState(false);
+    const [preview, setPreview] = useState(item?.coverUrl || '');
+    const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+    const handleCover = async e => {
+      const file = e.target.files[0]; if (!file) return;
+      const b64 = await compressImage(file);
+      setPreview(b64); setForm(f => ({ ...f, coverUrl: b64 }));
+    };
+    const submit = async () => {
+      if (!form.title.trim()) return;
+      setSaving(true);
+      try {
+        const data = { ...form, price: form.price ? parseFloat(form.price) : null, updatedAt: serverTimestamp() };
+        if (!item) data.createdAt = serverTimestamp();
+        await handleSave(item, data, false);
+        setSaving(false); onClose();
+      } catch(e) { console.error(e); setSaving(false); }
+    };
+    return React.createElement('div', { className: 'modal-overlay', onClick: e => e.target === e.currentTarget && onClose() },
+      React.createElement('div', { className: 'modal' },
+        React.createElement('div', { className: 'modal-header' },
+          React.createElement('span', { className: 'modal-title' }, item ? '編輯願望' : '加入願望清單'),
+          React.createElement('button', { className: 'modal-close', onClick: onClose }, '✕')
+        ),
+        React.createElement('div', { className: 'form-grid' },
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '書名'),
+            React.createElement('input', { className: 'form-input', value: form.title, onChange: set('title'), placeholder: '書名' })
+          ),
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '作者'),
+            React.createElement('input', { className: 'form-input', value: form.author, onChange: set('author'), placeholder: '作者' })
+          ),
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '分類'),
+            React.createElement('input', { className: 'form-input', value: form.category, onChange: set('category'), placeholder: '小說、散文…' })
+          ),
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '預算價格'),
+            React.createElement('input', { className: 'form-input', type: 'number', value: form.price, onChange: set('price'), placeholder: '0', min: 0 })
+          ),
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '封面圖片'),
+            React.createElement('div', { className: 'cover-upload' },
+              React.createElement('input', { type: 'file', accept: 'image/*', onChange: handleCover }),
+              React.createElement('div', { className: 'cover-upload-icon' }, '🖼'),
+              React.createElement('div', { className: 'cover-upload-text' }, preview ? '點擊更換' : '點擊上傳'),
+              preview && React.createElement('img', { className: 'cover-preview', src: preview, alt: '' })
+            )
+          )
+        ),
+        React.createElement('div', { className: 'form-actions' },
+          item && React.createElement('button', {
+            className: 'btn-danger', style: { marginRight: 'auto' },
+            onClick: async () => { if (confirm('確定刪除？')) { await handleSave(item, null, true); onClose(); } }
+          }, '刪除'),
+          React.createElement('button', { className: 'btn-secondary', onClick: onClose }, '取消'),
+          React.createElement('button', { className: 'btn-primary', onClick: submit, disabled: saving }, saving ? '儲存中…' : '儲存')
+        )
+      )
+    );
+  };
+
+  return React.createElement(React.Fragment, null,
+    /* ── Spending stats ── */
+    boughtBooks.length > 0 && React.createElement('div', { style: { marginBottom: '20px' } },
+      React.createElement('div', { style: { fontSize: '0.78rem', color: 'var(--text3)', letterSpacing: '0.06em', marginBottom: '8px' } }, '📊 書籍花費統計'),
+      /* year tabs */
+      React.createElement('div', { className: 'filter-chips', style: { marginBottom: '12px' } },
+        years.map(y =>
+          React.createElement('button', {
+            key: y, className: 'filter-chip' + (curYear === y ? ' active' : ''),
+            onClick: () => setSelYear(y)
+          }, y)
+        )
+      ),
+      React.createElement('div', { className: 'wish-total' },
+        React.createElement('span', null, `${curYear} 年購書花費`),
+        React.createElement('span', { className: 'wish-total-num' }, `$${yearTotal.toLocaleString()}`)
+      ),
+      months.map(([mon, data]) =>
+        React.createElement('div', { key: mon, style: { marginBottom: '8px' } },
+          React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text2)', marginBottom: '4px' } },
+            React.createElement('span', null, mon),
+            React.createElement('span', { style: { color: 'var(--accent)' } }, `$${data.total.toLocaleString()}`)
+          ),
+          React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
+            data.books.map(b =>
+              React.createElement('div', { key: b.id, style: { display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text3)', padding: '3px 8px', background: 'var(--bg2)', borderRadius: '6px' } },
+                React.createElement('span', null, b.title),
+                React.createElement('span', null, `$${b.purchasePrice}`)
+              )
+            )
+          )
+        )
+      ),
+      React.createElement('hr', { className: 'detail-divider', style: { margin: '16px 0' } })
+    ),
+
+    /* ── Wishlist ── */
+    React.createElement('div', { style: { fontSize: '0.78rem', color: 'var(--text3)', letterSpacing: '0.06em', marginBottom: '10px' } }, `🛒 願望清單（${wishItems.length}）`),
+    loading
+      ? React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }), '載入中…')
+      : wishItems.length === 0
+        ? React.createElement('div', { className: 'empty-state' },
+            React.createElement('div', { className: 'empty-icon' }, '🛒'),
+            React.createElement('div', { className: 'empty-title' }, '願望清單是空的'),
+            React.createElement('div', { className: 'empty-desc' }, '點右下角 ＋ 加入想買的書')
+          )
+        : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+            wishItems.map(item =>
+              React.createElement('div', { key: item.id, className: 'wish-card' },
+                React.createElement('div', { className: 'wish-thumb', onClick: () => { setEditItem(item); setShowForm(true); }, style: { cursor: 'pointer' } },
+                  item.coverUrl ? React.createElement('img', { src: item.coverUrl, alt: '' }) : '📚'
+                ),
+                React.createElement('div', { className: 'wish-meta', style: { paddingRight: '60px' }, onClick: () => { setEditItem(item); setShowForm(true); }, },
+                  React.createElement('div', { className: 'wish-title' }, item.title),
+                  React.createElement('div', { className: 'wish-author' }, item.author || ''),
+                  React.createElement('div', { className: 'wish-tags' },
+                    item.category && React.createElement('span', { className: 'tag' }, item.category),
+                    item.price && React.createElement('span', { className: 'tag', style: { color: 'var(--accent)' } }, `$${item.price}`)
+                  )
+                ),
+                React.createElement('button', {
+                  className: 'wish-add-btn',
+                  disabled: moving === item.id,
+                  onClick: () => handleMoveToShelf(item)
+                }, moving === item.id ? '…' : '入架')
+              )
+            )
+          ),
+
+    showForm && React.createElement(WishForm, {
+      item: editItem, onClose: () => { setShowForm(false); setEditItem(null); }
+    })
+  );
+}
+
 /* ── Main App ── */
 
 /* ── DramaCalendar ── */
@@ -3810,7 +4022,8 @@ function App() {
   const [showNavMenu, setShowNavMenu] = useState(false);
   const [shelfView, setShelfView] = useState('books'); // 'books' | 'authors'
   const [collShowForm, setCollShowForm] = useState(false);
-  const [eventsShowForm, setEventsShowForm] = useState(false); // 'shelf' | 'progress'
+  const [eventsShowForm, setEventsShowForm] = useState(false);
+  const [wishlistShowForm, setWishlistShowForm] = useState(false); // 'shelf' | 'progress'
   const [toastEl, showToast] = useToast();
 
   /* theme */
@@ -4089,53 +4302,11 @@ function App() {
             '載入中…'
           )
         : shelfView === 'wishlist'
-          ? React.createElement(React.Fragment, null,
-              /* total spent */
-              (() => {
-                const wishBooks = books.filter(b => b.status === 'unread' && b.purchasePrice);
-                const boughtBooks = books.filter(b => b.purchasePrice > 0);
-                const totalSpent = boughtBooks.reduce((s, b) => s + (b.purchasePrice || 0), 0);
-                const wishCost   = wishBooks.reduce((s, b) => s + (b.purchasePrice || 0), 0);
-                return React.createElement(React.Fragment, null,
-                  React.createElement('div', { className: 'wish-total' },
-                    React.createElement('span', null, '📦 已購買書籍花費'),
-                    React.createElement('span', { className: 'wish-total-num' }, `$${totalSpent.toLocaleString()}`)
-                  ),
-                  wishBooks.length > 0 && React.createElement('div', { className: 'wish-total', style: { borderStyle: 'dashed' } },
-                    React.createElement('span', null, '🛒 願望清單預計花費'),
-                    React.createElement('span', { className: 'wish-total-num' }, `$${wishCost.toLocaleString()}`)
-                  )
-                );
-              })(),
-              /* wishlist books (unread) */
-              books.filter(b => b.status === 'unread').length === 0
-                ? React.createElement('div', { className: 'empty-state' },
-                    React.createElement('div', { className: 'empty-icon' }, '🛒'),
-                    React.createElement('div', { className: 'empty-title' }, '願望清單是空的'),
-                    React.createElement('div', { className: 'empty-desc' }, '新增書籍並設為「未讀」就會出現這裡')
-                  )
-                : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-                    books.filter(b => b.status === 'unread').map(b =>
-                      React.createElement('div', { key: b.id, className: 'wish-card', onClick: () => setDetailBook(b) },
-                        React.createElement('div', { className: 'wish-thumb' },
-                          b.coverUrl ? React.createElement('img', { src: b.coverUrl, alt: '' }) : '📚'
-                        ),
-                        React.createElement('div', { className: 'wish-meta', style: { paddingRight: '70px' } },
-                          React.createElement('div', { className: 'wish-title' }, b.title),
-                          React.createElement('div', { className: 'wish-author' }, b.author || ''),
-                          React.createElement('div', { className: 'wish-tags' },
-                            b.category && React.createElement('span', { className: 'tag' }, b.category),
-                            b.purchasePrice && React.createElement('span', { className: 'tag', style: { color: 'var(--accent)' } }, `$${b.purchasePrice}`)
-                          )
-                        ),
-                        React.createElement('button', {
-                          className: 'wish-add-btn',
-                          onClick: e => { e.stopPropagation(); setEditBook(b); setShowForm(true); }
-                        }, '編輯')
-                      )
-                    )
-                  )
-            )
+          ? React.createElement(WishlistPage, {
+              db, showToast, books,
+              externalShowForm: wishlistShowForm,
+              onExternalFormClose: () => setWishlistShowForm(false)
+            })
         : shelfView === 'authors'
           ? authorList.length === 0
             ? React.createElement('div', { className: 'empty-state' },
@@ -4192,7 +4363,8 @@ function App() {
     (page === 'shelf' || page === 'collection' || page === 'events') && React.createElement('button', {
       className: 'fab',
       onClick: () => {
-        if (page === 'shelf') { setEditBook(null); setShowForm(true); }
+        if (page === 'shelf' && shelfView === 'wishlist') { setWishlistShowForm(true); }
+        else if (page === 'shelf') { setEditBook(null); setShowForm(true); }
         else if (page === 'collection') { setCollShowForm(true); }
         else { setEventsShowForm(true); }
       }
