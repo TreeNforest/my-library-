@@ -1311,6 +1311,43 @@
     backdrop-filter: blur(4px);
   }
   .img-zoomable { cursor: zoom-in; }
+
+  /* ── Wishlist ── */
+  .wish-card {
+    background: var(--surface); border: 1px dashed var(--border);
+    border-radius: var(--radius); padding: 14px 16px;
+    display: flex; gap: 14px; cursor: pointer;
+    transition: transform var(--trans), box-shadow var(--trans), border-color var(--trans);
+    animation: cardIn 0.35s ease both;
+    position: relative;
+  }
+  .wish-card:hover { transform: translateX(4px); border-color: var(--accent); box-shadow: 0 4px 14px var(--shadow); }
+  .wish-thumb {
+    width: 48px; height: 68px; flex-shrink: 0; border-radius: 4px; overflow: hidden;
+    background: linear-gradient(135deg, var(--bg3), var(--bg2));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; color: var(--text3);
+  }
+  .wish-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .wish-meta { flex: 1; min-width: 0; }
+  .wish-title { font-size: 0.95rem; font-weight: 500; margin-bottom: 3px; }
+  .wish-author { font-size: 0.78rem; color: var(--text3); margin-bottom: 6px; }
+  .wish-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .wish-add-btn {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 14px; padding: 4px 12px;
+    font-size: 0.78rem; font-family: 'CreamFont', serif; cursor: pointer;
+    transition: opacity var(--trans);
+  }
+  .wish-add-btn:hover { opacity: 0.85; }
+  .wish-total {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 18px;
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px; font-size: 0.88rem; color: var(--text2);
+  }
+  .wish-total-num { font-size: 1.2rem; font-weight: 500; color: var(--accent); }
   /* ── Responsive ── */
   @media (max-width: 600px) {
     .form-group.full { grid-column: 1; }
@@ -1472,6 +1509,7 @@ function BookForm({ book, onClose, onSave }) {
     notes:    book?.notes    || '',
     coverUrl: book?.coverUrl || '',
     status:      book?.status      || 'unread',
+    purchasePrice: book?.purchasePrice !== undefined ? String(book.purchasePrice) : '',
     publisher:   book?.publisher   || '',
     originalTitle: book?.originalTitle || '',
     language:    book?.language    || '',
@@ -1507,6 +1545,7 @@ function BookForm({ book, onClose, onSave }) {
         notes:       form.notes,
         coverUrl:    form.coverUrl,
         status:      form.status,
+        purchasePrice: form.purchasePrice !== '' ? parseFloat(form.purchasePrice) : null,
         publisher:   form.publisher,
         originalTitle: form.originalTitle,
         language:    form.language,
@@ -1570,6 +1609,11 @@ function BookForm({ book, onClose, onSave }) {
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '書籍介紹'),
           React.createElement('textarea', { className: 'form-textarea', value: form.description, onChange: set('description'), placeholder: '簡介這本書的內容…', style: { minHeight: '80px' } })
+        ),
+        /* purchasePrice */
+        React.createElement('div', { className: 'form-group' },
+          React.createElement('label', null, '購買金額'),
+          React.createElement('input', { className: 'form-input', type: 'number', value: form.purchasePrice, onChange: set('purchasePrice'), placeholder: '0', min: 0 })
         ),
         /* format */
         React.createElement('div', { className: 'form-group full' },
@@ -1672,6 +1716,7 @@ function BookDetail({ book, onClose, onEdit, onAuthor }) {
             [
               book.category && { label: '分類', value: book.category },
               book.dateRead && { label: '閱讀日期', value: book.dateRead },
+              book.purchasePrice && { label: '購買金額', value: `$${book.purchasePrice}` },
               book.publisher && { label: '出版社', value: book.publisher },
               book.language  && { label: '語言', value: book.language },
               book.format    && { label: '版本', value: book.format === 'paper' ? '📄 紙本' : '📱 電子書' },
@@ -2294,6 +2339,9 @@ function PersonPage({ person, role, onClose, onDramaClick, db }) {
   // Load saved data from Firestore
   const [photoUrl, setPhotoUrl]       = useState('');
   const [nationality, setNationality] = useState('');
+  const [gender, setGender]             = useState('');
+  const [editingGender, setEditingGender] = useState(false);
+  const [genderInput, setGenderInput]   = useState('');
   const [editingNation, setEditingNation] = useState(false);
   const [nationInput, setNationInput] = useState('');
   const [pendingPhoto, setPendingPhoto] = useState('');
@@ -2304,6 +2352,7 @@ function PersonPage({ person, role, onClose, onDramaClick, db }) {
       if (snap.exists()) {
         setPhotoUrl(snap.data().photoUrl || '');
         setNationality(snap.data().nationality || '');
+        setGender(snap.data().gender || '');
       }
     }, () => {});
     return unsub;
@@ -2313,6 +2362,12 @@ function PersonPage({ person, role, onClose, onDramaClick, db }) {
     await setDoc(doc(db, 'people', personId), { name: person.name, nationality: nationInput }, { merge: true });
     setNationality(nationInput);
     setEditingNation(false);
+  };
+
+  const handleGenderSave = async (val) => {
+    await setDoc(doc(db, 'people', personId), { name: person.name, gender: val }, { merge: true });
+    setGender(val);
+    setEditingGender(false);
   };
 
   const handlePhotoSelect = async e => {
@@ -2366,11 +2421,28 @@ function PersonPage({ person, role, onClose, onDramaClick, db }) {
                 React.createElement('button', { className: 'btn-primary', style: { padding: '4px 10px', fontSize: '0.78rem' }, onClick: handleNationSave }, '確認'),
                 React.createElement('button', { style: { fontSize: '0.78rem', color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer' }, onClick: () => setEditingNation(false) }, '取消')
               )
-            : React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' } },
+            : React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', flexWrap: 'wrap' } },
                 nationality && React.createElement('span', { style: { fontSize: '0.78rem', background: 'var(--bg3)', color: 'var(--text2)', padding: '2px 8px', borderRadius: '10px' } }, nationality),
                 React.createElement('button', { style: { fontSize: '0.72rem', color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer' }, onClick: () => { setNationInput(nationality); setEditingNation(true); } },
                   nationality ? '✎' : '＋ 國籍'
-                )
+                ),
+                editingGender
+                  ? React.createElement('div', { style: { display: 'flex', gap: '4px' } },
+                      ['男', '女', '不明'].map(g =>
+                        React.createElement('button', {
+                          key: g,
+                          className: 'status-tab' + (genderInput === g ? ' active' : ''),
+                          onClick: () => { setGenderInput(g); handleGenderSave(g); }
+                        }, g)
+                      ),
+                      React.createElement('button', { style: { fontSize: '0.72rem', color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer' }, onClick: () => setEditingGender(false) }, '取消')
+                    )
+                  : React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } },
+                      gender && React.createElement('span', { style: { fontSize: '0.78rem', background: 'var(--bg3)', color: 'var(--text2)', padding: '2px 8px', borderRadius: '10px' } }, gender),
+                      React.createElement('button', { style: { fontSize: '0.72rem', color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer' }, onClick: () => { setGenderInput(gender); setEditingGender(true); } },
+                        gender ? '✎' : '＋ 性別'
+                      )
+                    )
               )
         )
       ),
@@ -2483,6 +2555,7 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
   const [peopleTab, setPeopleTab]   = useState('cast'); // 'director' | 'writer' | 'cast'
   const [peopleSearch, setPeopleSearch] = useState('');
   const [nationFilter, setNationFilter]   = useState('all');
+  const [genderFilter, setGenderFilter]   = useState('all');
   const [personPage, setPersonPage]  = useState(null);
   const [peopleData, setPeopleData]   = useState({}); // { personId: { nationality, photoUrl } }
 
@@ -2538,23 +2611,24 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
   });
   const directorList = Object.entries(directorMap).map(([name, dramas]) => {
     const pid = encodeURIComponent(name).replace(/%/g, '_');
-    return { name, dramas, nationality: peopleData[pid]?.nationality || '' };
+    return { name, dramas, nationality: peopleData[pid]?.nationality || '', gender: peopleData[pid]?.gender || '' };
   }).sort((a,b) => b.dramas.length - a.dramas.length);
   const writerList = Object.entries(writerMap).map(([name, dramas]) => {
     const pid = encodeURIComponent(name).replace(/%/g, '_');
-    return { name, dramas, nationality: peopleData[pid]?.nationality || '' };
+    return { name, dramas, nationality: peopleData[pid]?.nationality || '', gender: peopleData[pid]?.gender || '' };
   }).sort((a,b) => b.dramas.length - a.dramas.length);
   const castList = Object.entries(castMap).map(([name, dramas]) => {
     const pid = encodeURIComponent(name).replace(/%/g, '_');
-    const nationality = peopleData[pid]?.nationality || '';
-    return { name, dramas, nationality };
+    return { name, dramas, nationality: peopleData[pid]?.nationality || '', gender: peopleData[pid]?.gender || '' };
   }).sort((a,b) => b.dramas.length - a.dramas.length);
   const peopleListRaw = peopleTab === 'director' ? directorList : peopleTab === 'writer' ? writerList : castList;
   const allNations = ['all', ...new Set(peopleListRaw.map(p => p.nationality).filter(Boolean))];
+  const allGenders = ['all', ...new Set(peopleListRaw.map(p => p.gender).filter(Boolean))];
   const peopleList = peopleListRaw.filter(p => {
     const matchSearch = !peopleSearch || p.name.includes(peopleSearch);
     const matchNation = nationFilter === 'all' || p.nationality === nationFilter;
-    return matchSearch && matchNation;
+    const matchGender = genderFilter === 'all' || p.gender === genderFilter;
+    return matchSearch && matchNation && matchGender;
   });
   const filtered = items.filter(i => {
     const q = search.toLowerCase();
@@ -2608,15 +2682,15 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
       React.createElement('div', { className: 'status-tabs', style: { marginBottom: 0 } },
         React.createElement('button', {
           className: 'status-tab' + (peopleTab === 'director' ? ' active' : ''),
-          onClick: () => { setPeopleTab('director'); setNationFilter('all'); }
+          onClick: () => { setPeopleTab('director'); setNationFilter('all'); setGenderFilter('all'); }
         }, `導演 (${directorList.length})`),
         React.createElement('button', {
           className: 'status-tab' + (peopleTab === 'writer' ? ' active' : ''),
-          onClick: () => { setPeopleTab('writer'); setNationFilter('all'); }
+          onClick: () => { setPeopleTab('writer'); setNationFilter('all'); setGenderFilter('all'); }
         }, `編劇 (${writerList.length})`),
         React.createElement('button', {
           className: 'status-tab' + (peopleTab === 'cast' ? ' active' : ''),
-          onClick: () => { setPeopleTab('cast'); setNationFilter('all'); }
+          onClick: () => { setPeopleTab('cast'); setNationFilter('all'); setGenderFilter('all'); }
         }, `演員 (${castList.length})`)
       ),
       React.createElement('div', { className: 'view-toggle' },
@@ -2633,7 +2707,7 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
       })
     ),
     /* nationality filter - only show for cast tab */
-    allNations.length > 1 && React.createElement('div', { className: 'filter-row', style: { marginBottom: '14px' } },
+    allNations.length > 1 && React.createElement('div', { className: 'filter-row', style: { marginBottom: '8px' } },
       React.createElement('div', { className: 'filter-row-label' }, '國籍'),
       React.createElement('div', { className: 'filter-chips' },
         allNations.map(n =>
@@ -2642,6 +2716,18 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
             className: 'filter-chip' + (nationFilter === n ? ' active' : ''),
             onClick: () => setNationFilter(n)
           }, n === 'all' ? '全部' : n)
+        )
+      )
+    ),
+    allGenders.length > 1 && React.createElement('div', { className: 'filter-row', style: { marginBottom: '14px' } },
+      React.createElement('div', { className: 'filter-row-label' }, '性別'),
+      React.createElement('div', { className: 'filter-chips' },
+        allGenders.map(g =>
+          React.createElement('button', {
+            key: g,
+            className: 'filter-chip' + (genderFilter === g ? ' active' : ''),
+            onClick: () => setGenderFilter(g)
+          }, g === 'all' ? '全部' : g)
         )
       )
     ),
@@ -3951,7 +4037,11 @@ function App() {
         React.createElement('button', {
           className: 'shelf-toggle-btn' + (shelfView === 'authors' ? ' active' : ''),
           onClick: () => setShelfView('authors')
-        }, '作者')
+        }, '作者'),
+        React.createElement('button', {
+          className: 'shelf-toggle-btn' + (shelfView === 'wishlist' ? ' active' : ''),
+          onClick: () => setShelfView('wishlist')
+        }, '🛒 願望清單')
       ),
 
       /* status tabs */
@@ -3998,6 +4088,54 @@ function App() {
             React.createElement('div', { className: 'spinner' }),
             '載入中…'
           )
+        : shelfView === 'wishlist'
+          ? React.createElement(React.Fragment, null,
+              /* total spent */
+              (() => {
+                const wishBooks = books.filter(b => b.status === 'unread' && b.purchasePrice);
+                const boughtBooks = books.filter(b => b.purchasePrice > 0);
+                const totalSpent = boughtBooks.reduce((s, b) => s + (b.purchasePrice || 0), 0);
+                const wishCost   = wishBooks.reduce((s, b) => s + (b.purchasePrice || 0), 0);
+                return React.createElement(React.Fragment, null,
+                  React.createElement('div', { className: 'wish-total' },
+                    React.createElement('span', null, '📦 已購買書籍花費'),
+                    React.createElement('span', { className: 'wish-total-num' }, `$${totalSpent.toLocaleString()}`)
+                  ),
+                  wishBooks.length > 0 && React.createElement('div', { className: 'wish-total', style: { borderStyle: 'dashed' } },
+                    React.createElement('span', null, '🛒 願望清單預計花費'),
+                    React.createElement('span', { className: 'wish-total-num' }, `$${wishCost.toLocaleString()}`)
+                  )
+                );
+              })(),
+              /* wishlist books (unread) */
+              books.filter(b => b.status === 'unread').length === 0
+                ? React.createElement('div', { className: 'empty-state' },
+                    React.createElement('div', { className: 'empty-icon' }, '🛒'),
+                    React.createElement('div', { className: 'empty-title' }, '願望清單是空的'),
+                    React.createElement('div', { className: 'empty-desc' }, '新增書籍並設為「未讀」就會出現這裡')
+                  )
+                : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+                    books.filter(b => b.status === 'unread').map(b =>
+                      React.createElement('div', { key: b.id, className: 'wish-card', onClick: () => setDetailBook(b) },
+                        React.createElement('div', { className: 'wish-thumb' },
+                          b.coverUrl ? React.createElement('img', { src: b.coverUrl, alt: '' }) : '📚'
+                        ),
+                        React.createElement('div', { className: 'wish-meta', style: { paddingRight: '70px' } },
+                          React.createElement('div', { className: 'wish-title' }, b.title),
+                          React.createElement('div', { className: 'wish-author' }, b.author || ''),
+                          React.createElement('div', { className: 'wish-tags' },
+                            b.category && React.createElement('span', { className: 'tag' }, b.category),
+                            b.purchasePrice && React.createElement('span', { className: 'tag', style: { color: 'var(--accent)' } }, `$${b.purchasePrice}`)
+                          )
+                        ),
+                        React.createElement('button', {
+                          className: 'wish-add-btn',
+                          onClick: e => { e.stopPropagation(); setEditBook(b); setShowForm(true); }
+                        }, '編輯')
+                      )
+                    )
+                  )
+            )
         : shelfView === 'authors'
           ? authorList.length === 0
             ? React.createElement('div', { className: 'empty-state' },
