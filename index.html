@@ -1449,6 +1449,7 @@ function BookForm({ book, onClose, onSave }) {
     coverUrl: book?.coverUrl || '',
     status:      book?.status      || 'unread',
     publisher:   book?.publisher   || '',
+    originalTitle: book?.originalTitle || '',
     language:    book?.language    || '',
     format:      book?.format      || '',
     description: book?.description || '',
@@ -1483,6 +1484,7 @@ function BookForm({ book, onClose, onSave }) {
         coverUrl:    form.coverUrl,
         status:      form.status,
         publisher:   form.publisher,
+        originalTitle: form.originalTitle,
         language:    form.language,
         format:      form.format,
         description: form.description,
@@ -1509,6 +1511,10 @@ function BookForm({ book, onClose, onSave }) {
         React.createElement('div', { className: 'form-group full' },
           React.createElement('label', null, '書名'),
           React.createElement('input', { className: 'form-input', value: form.title, onChange: set('title'), placeholder: '書名' })
+        ),
+        React.createElement('div', { className: 'form-group full' },
+          React.createElement('label', null, '原文名'),
+          React.createElement('input', { className: 'form-input', value: form.originalTitle, onChange: set('originalTitle'), placeholder: '原文書名' })
         ),
         /* author */
         React.createElement('div', { className: 'form-group' },
@@ -1626,6 +1632,7 @@ function BookDetail({ book, onClose, onEdit, onAuthor }) {
         ),
         React.createElement('div', { className: 'detail-meta' },
           React.createElement('div', { className: 'detail-title' }, book.title),
+          book.originalTitle && React.createElement('div', { style: { fontSize: '0.85rem', color: 'var(--text3)', margin: '2px 0 6px' } }, book.originalTitle),
           book.author
             ? React.createElement('button', {
                 className: 'detail-author',
