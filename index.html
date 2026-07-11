@@ -2067,46 +2067,134 @@ const DramaStatusBadge = ({ status }) => {
 /* ── CastNationEditor ── */
 function CastNationEditor({ castStr, db }) {
   const names = castStr.split(/[,，]+/).map(n => n.trim()).filter(Boolean);
-  const [nations, setNations] = useState({});
-  const [saved, setSaved]     = useState({});
+  const [nations, setNations]     = useState({});
+  const [genders, setGenders]     = useState({});
+  const [saved, setSaved]         = useState({});
+  const [customInput, setCustomInput] = useState({}); // name → custom typing mode
 
-  // Load existing nationalities
+  // Collect all known nationalities from Firestore
+  const [knownNations, setKnownNations] = useState([]);
+  useEffect(() => {
+    getDoc(doc(db, '_meta', 'nationalities'))
+      .then(snap => { if (snap.exists()) setKnownNations(snap.data().list || []); })
+      .catch(() => {});
+  }, []);
+
+  // Load existing data
   useEffect(() => {
     if (!names.length) return;
     Promise.all(names.map(async name => {
       const pid = encodeURIComponent(name).replace(/%/g, '_');
       const snap = await getDoc(doc(db, 'people', pid));
-      return [name, snap.exists() ? (snap.data().nationality || '') : ''];
+      return [name, snap.exists() ? snap.data() : {}];
     })).then(results => {
-      const map = {};
-      results.forEach(([name, nat]) => { map[name] = nat; });
-      setNations(map);
+      const natMap = {}, genMap = {};
+      results.forEach(([name, data]) => {
+        natMap[name] = data.nationality || '';
+        genMap[name] = data.gender || '';
+      });
+      setNations(natMap);
+      setGenders(genMap);
     });
   }, [castStr]);
 
-  const handleSave = async name => {
+  const handleSave = async (name, newNat, newGen) => {
+    const nat = newNat !== undefined ? newNat : (nations[name] || '');
+    const gen = newGen !== undefined ? newGen : (genders[name] || '');
     const pid = encodeURIComponent(name).replace(/%/g, '_');
-    await setDoc(doc(db, 'people', pid), { name, nationality: nations[name] || '' }, { merge: true });
+    await setDoc(doc(db, 'people', pid), { name, nationality: nat, gender: gen }, { merge: true });
+    // Save new nationality to known list
+    if (nat && !knownNations.includes(nat)) {
+      const newList = [...knownNations, nat];
+      setKnownNations(newList);
+      await setDoc(doc(db, '_meta', 'nationalities'), { list: newList });
+    }
     setSaved(s => ({ ...s, [name]: true }));
     setTimeout(() => setSaved(s => ({ ...s, [name]: false })), 1500);
   };
 
+  const selectNation = (name, nat) => {
+    setNations(n => ({ ...n, [name]: nat }));
+    handleSave(name, nat, undefined);
+    setCustomInput(c => ({ ...c, [name]: false }));
+  };
+
   if (!names.length) return null;
 
+  // Common preset nationalities
+  const PRESETS = ['韓國', '日本', '台灣', '中國', '美國', '英國', '泰國'];
+  const allOptions = [...new Set([...PRESETS, ...knownNations])];
+
   return React.createElement('div', { className: 'cast-nation-panel' },
-    React.createElement('div', { style: { fontSize: '0.75rem', color: 'var(--text3)', marginBottom: '2px' } }, '快速設定演員國籍'),
+    React.createElement('div', { style: { fontSize: '0.75rem', color: 'var(--text3)', marginBottom: '6px' } }, '快速設定演員資料'),
     names.map(name =>
-      React.createElement('div', { key: name, className: 'cast-nation-row' },
-        React.createElement('div', { className: 'cast-nation-name' }, name),
-        React.createElement('input', {
-          className: 'cast-nation-input',
-          placeholder: '韓國、日本…',
-          value: nations[name] || '',
-          onChange: e => setNations(n => ({ ...n, [name]: e.target.value })),
-          onBlur: () => handleSave(name),
-          onKeyDown: e => e.key === 'Enter' && handleSave(name)
-        }),
-        saved[name] && React.createElement('span', { className: 'cast-nation-saved' }, '✓')
+      React.createElement('div', { key: name, style: { marginBottom: '10px' } },
+        /* name + saved indicator */
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' } },
+          React.createElement('div', { className: 'cast-nation-name' }, name),
+          saved[name] && React.createElement('span', { className: 'cast-nation-saved' }, '✓')
+        ),
+        /* nationality chips */
+        React.createElement('div', { style: { display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '5px' } },
+          allOptions.map(n =>
+            React.createElement('button', {
+              key: n, type: 'button',
+              style: {
+                padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem',
+                border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit',
+                background: nations[name] === n ? 'var(--accent)' : 'var(--bg2)',
+                color:      nations[name] === n ? '#fff'          : 'var(--text2)',
+              },
+              onClick: () => selectNation(name, nations[name] === n ? '' : n)
+            }, n)
+          ),
+          /* custom input toggle */
+          customInput[name]
+            ? React.createElement('div', { style: { display: 'flex', gap: '4px' } },
+                React.createElement('input', {
+                  className: 'cast-nation-input', style: { width: '80px' },
+                  placeholder: '自訂…', autoFocus: true,
+                  onKeyDown: e => {
+                    if (e.key === 'Enter' && e.target.value.trim()) {
+                      selectNation(name, e.target.value.trim());
+                    }
+                    if (e.key === 'Escape') setCustomInput(c => ({ ...c, [name]: false }));
+                  }
+                }),
+                React.createElement('button', {
+                  type: 'button', style: { fontSize: '0.72rem', color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer' },
+                  onClick: () => setCustomInput(c => ({ ...c, [name]: false }))
+                }, '取消')
+              )
+            : React.createElement('button', {
+                type: 'button',
+                style: {
+                  padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem',
+                  border: '1px dashed var(--border)', cursor: 'pointer', fontFamily: 'inherit',
+                  background: 'none', color: 'var(--text3)',
+                },
+                onClick: () => setCustomInput(c => ({ ...c, [name]: true }))
+              }, '其他…')
+        ),
+        /* gender buttons */
+        React.createElement('div', { style: { display: 'flex', gap: '4px' } },
+          ['男', '女'].map(g =>
+            React.createElement('button', {
+              key: g, type: 'button',
+              style: {
+                padding: '4px 10px', borderRadius: '12px', fontSize: '0.78rem',
+                border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit',
+                background: genders[name] === g ? 'var(--accent)' : 'var(--bg2)',
+                color:      genders[name] === g ? '#fff'          : 'var(--text2)',
+              },
+              onClick: () => {
+                const newG = genders[name] === g ? '' : g;
+                setGenders(gs => ({ ...gs, [name]: newG }));
+                handleSave(name, undefined, newG);
+              }
+            }, g)
+          )
+        )
       )
     )
   );
