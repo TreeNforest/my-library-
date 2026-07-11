@@ -1287,6 +1287,30 @@
   }
   .fab:hover { transform: scale(1.1); opacity: 0.9; }
   .fab:active { transform: scale(0.95); }
+
+  /* ── Lightbox ── */
+  .lightbox-overlay {
+    position: fixed; inset: 0; z-index: 400;
+    background: rgba(0,0,0,0.88);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; animation: overlayIn 0.2s ease;
+    cursor: zoom-out;
+  }
+  .lightbox-img {
+    max-width: 100%; max-height: 90vh;
+    object-fit: contain; border-radius: 8px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    animation: modalIn 0.2s ease;
+  }
+  .lightbox-close {
+    position: absolute; top: 16px; right: 16px;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(255,255,255,0.15); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem; cursor: pointer; border: none;
+    backdrop-filter: blur(4px);
+  }
+  .img-zoomable { cursor: zoom-in; }
   /* ── Responsive ── */
   @media (max-width: 600px) {
     .form-group.full { grid-column: 1; }
@@ -1618,6 +1642,7 @@ function BookForm({ book, onClose, onSave }) {
 
 /* ── Detail modal ── */
 function BookDetail({ book, onClose, onEdit, onAuthor }) {
+  const [lightbox, setLightbox] = useState(false);
   return React.createElement('div', { className: 'modal-overlay', onClick: e => e.target === e.currentTarget && onClose() },
     React.createElement('div', { className: 'modal' },
       React.createElement('div', { className: 'modal-header' },
@@ -1967,6 +1992,14 @@ function CollDetail({ item, onClose, onEdit }) {
   );
 }
 
+/* ── Lightbox ── */
+function Lightbox({ src, onClose }) {
+  return React.createElement('div', { className: 'lightbox-overlay', onClick: onClose },
+    React.createElement('img', { className: 'lightbox-img', src, alt: '', onClick: e => e.stopPropagation() }),
+    React.createElement('button', { className: 'lightbox-close', onClick: onClose }, '✕')
+  );
+}
+
 /* ── DramaStatusBadge ── */
 const DRAMA_STATUS = {
   unwatched: { label: '未看', cls: 'drama-status-unwatched', icon: '🎬' },
@@ -2165,6 +2198,7 @@ function DramaForm({ item, onClose, onSave, db }) {
 function DramaDetail({ item, onClose, onEdit, onPerson }) {
   const scrollRef = React.useRef(null);
   const [imgOpacity, setImgOpacity] = useState(1);
+  const [lightbox, setLightbox] = useState(false);
 
   const handleScroll = () => {
     if (!scrollRef.current) return;
@@ -2195,11 +2229,11 @@ function DramaDetail({ item, onClose, onEdit, onPerson }) {
       onScroll: handleScroll
     },
       /* hero image */
+      lightbox && item.coverUrl && React.createElement(Lightbox, { src: item.coverUrl, onClose: () => setLightbox(false) }),
       React.createElement('div', { className: 'drama-detail-hero' },
         item.coverUrl
-          ? React.createElement('img', { className: 'drama-detail-hero-img', src: item.coverUrl, alt: '', style: { opacity: imgOpacity } })
+          ? React.createElement('img', { className: 'drama-detail-hero-img img-zoomable', src: item.coverUrl, alt: '', style: { opacity: imgOpacity }, onClick: e => { e.stopPropagation(); setLightbox(true); } })
           : React.createElement('div', { className: 'drama-detail-hero-placeholder' }, '🎬'),
-        React.createElement('div', { className: 'drama-detail-hero-fade' }),
         React.createElement('button', { className: 'drama-detail-close', onClick: onClose }, '✕')
       ),
       /* body */
@@ -3283,11 +3317,11 @@ function EventDetail({ item, onClose, onEdit }) {
 
   return React.createElement('div', { className: 'modal-overlay', onClick: e => e.target === e.currentTarget && onClose() },
     React.createElement('div', { className: 'drama-detail-modal', ref: scrollRef, onScroll: handleScroll },
+      lightbox && item.coverUrl && React.createElement(Lightbox, { src: item.coverUrl, onClose: () => setLightbox(false) }),
       React.createElement('div', { className: 'drama-detail-hero' },
         item.coverUrl
-          ? React.createElement('img', { className: 'drama-detail-hero-img', src: item.coverUrl, alt: '', style: { opacity: imgOpacity } })
+          ? React.createElement('img', { className: 'drama-detail-hero-img img-zoomable', src: item.coverUrl, alt: '', style: { opacity: imgOpacity }, onClick: e => { e.stopPropagation(); setLightbox(true); } })
           : React.createElement('div', { className: 'drama-detail-hero-placeholder' }, cat.icon),
-        React.createElement('div', { className: 'drama-detail-hero-fade' }),
         React.createElement('button', { className: 'drama-detail-close', onClick: onClose }, '✕')
       ),
       React.createElement('div', { className: 'drama-detail-body' },
