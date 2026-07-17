@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="我的書房" />
 <meta name="theme-color" content="#f5f2ee" />
 <link rel="manifest" href="manifest.json" />
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
 <link rel="apple-touch-icon" href="icon-192.png" />
 <title>我的書房 · 讀書紀錄</title>
 <style>
@@ -1395,6 +1396,46 @@
     transition: border-color var(--trans);
   }
   .ach-custom-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Settings Panel ── */
+  .settings-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(20,18,14,0.55); backdrop-filter: blur(4px);
+    animation: overlayIn 0.2s ease;
+  }
+  .settings-panel {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 201;
+    width: min(320px, 90vw);
+    background: var(--surface); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    animation: slideInRight 0.25s ease;
+    overflow-y: auto;
+  }
+  @keyframes slideInRight { from { transform: translateX(100%); } to { transform: none; } }
+  .settings-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--surface); z-index: 1;
+  }
+  .settings-title { font-size: 1.1rem; font-weight: 500; }
+  .settings-section { padding: 20px; border-bottom: 1px solid var(--border); }
+  .settings-section-title {
+    font-size: 0.72rem; color: var(--text3); letter-spacing: 0.08em;
+    text-transform: uppercase; margin-bottom: 14px;
+  }
+  .theme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .theme-grid-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); cursor: pointer;
+    transition: border-color var(--trans), background var(--trans);
+    font-size: 0.82rem; color: var(--text2);
+    font-family: 'CreamFont', serif; background: var(--bg2);
+  }
+  .theme-grid-item:hover { border-color: var(--accent); color: var(--text); }
+  .theme-grid-item.active { border-color: var(--accent); color: var(--accent); font-weight: 500; background: var(--bg3); }
+  .theme-grid-swatch { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
+  .theme-category-sep { grid-column: 1/-1; font-size: 0.7rem; color: var(--text3); letter-spacing: 0.06em; margin: 4px 0 2px; }
   /* ── Responsive ── */
   @media (max-width: 600px) {
     .form-group.full { grid-column: 1; }
@@ -1447,14 +1488,17 @@ const COLL = 'books';
 
 /* ── Helpers ── */
 const STATUS_MAP = {
-  unread:  { label: '未讀',  cls: 'status-unread',  icon: '📚' },
-  reading: { label: '在讀',  cls: 'status-reading', icon: '📖' },
-  done:    { label: '讀完',  cls: 'status-done',    icon: '✅' },
-  dropped: { label: '棄追',  cls: 'status-dropped', icon: '🚫' },
+  unread:  { label: '未讀',  cls: 'status-unread',  icon: 'books' },
+  reading: { label: '在讀',  cls: 'status-reading', icon: 'book-open' },
+  done:    { label: '讀完',  cls: 'status-done',    icon: 'check-circle' },
+  dropped: { label: '棄追',  cls: 'status-dropped', icon: 'prohibit' },
 };
 const StatusBadge = ({ status }) => {
   const s = STATUS_MAP[status] || STATUS_MAP['unread'];
-  return React.createElement('span', { className: `status-badge ${s.cls}` }, s.icon + ' ' + s.label);
+  return React.createElement('span', { className: `status-badge ${s.cls}` },
+    React.createElement('i', { className: `ph ph-${s.icon}`, style: { fontSize: '0.85em', marginRight: '3px', verticalAlign: 'middle' } }),
+    s.label
+  );
 };
 
 const Stars = ({ rating, size='sm' }) => {
@@ -2101,14 +2145,17 @@ function Lightbox({ src, onClose }) {
 
 /* ── DramaStatusBadge ── */
 const DRAMA_STATUS = {
-  unwatched: { label: '未看', cls: 'drama-status-unwatched', icon: '🎬' },
-  watching:  { label: '在看', cls: 'drama-status-watching',  icon: '📺' },
-  done:      { label: '看完', cls: 'drama-status-done',      icon: '✅' },
-  dropped:   { label: '棄追', cls: 'drama-status-dropped',   icon: '🚫' },
+  unwatched: { label: '未看', cls: 'drama-status-unwatched', icon: 'film-clapperboard' },
+  watching:  { label: '在看', cls: 'drama-status-watching',  icon: 'television-simple' },
+  done:      { label: '看完', cls: 'drama-status-done',      icon: 'check-circle' },
+  dropped:   { label: '棄追', cls: 'drama-status-dropped',   icon: 'prohibit' },
 };
 const DramaStatusBadge = ({ status }) => {
   const s = DRAMA_STATUS[status] || DRAMA_STATUS['unwatched'];
-  return React.createElement('span', { className: `status-badge ${s.cls}` }, s.icon + ' ' + s.label);
+  return React.createElement('span', { className: `status-badge ${s.cls}` },
+    React.createElement('i', { className: `ph ph-${s.icon}`, style: { fontSize: '0.85em', marginRight: '3px', verticalAlign: 'middle' } }),
+    s.label
+  );
 };
 
 /* ── CastNationEditor ── */
@@ -2836,13 +2883,13 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
         }, `演員 (${castList.length})`)
       ),
       React.createElement('div', { className: 'view-toggle' },
-        React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, '⊞'),
-        React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, '☰')
+        React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph ph-grid-four' })),
+        React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph ph-list' }))
       )
     ),
     /* people search */
     React.createElement('div', { className: 'search-wrap', style: { marginBottom: '10px' } },
-      React.createElement('span', { className: 'search-icon' }, '🔍'),
+      React.createElement('i', { className: 'ph ph-magnifying-glass search-icon' }),
       React.createElement('input', {
         type: 'text', placeholder: '搜尋姓名…',
         value: peopleSearch, onChange: e => setPeopleSearch(e.target.value)
@@ -2901,8 +2948,8 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
             )
           ),
     React.createElement('div', { style: { display: 'flex', gap: '4px', margin: '16px 0', justifyContent: 'flex-end' } },
-      React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, '⊞'),
-      React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, '☰')
+      React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph ph-grid-four' })),
+      React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph ph-list' }))
     )
   );
 
@@ -2924,12 +2971,12 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
     /* search + view toggle */
     React.createElement('div', { className: 'toolbar', style: { marginBottom: '10px' } },
       React.createElement('div', { className: 'search-wrap' },
-        React.createElement('span', { className: 'search-icon' }, '🔍'),
+        React.createElement('i', { className: 'ph ph-magnifying-glass search-icon' }),
         React.createElement('input', { type: 'text', placeholder: '搜尋劇名、類型或平台…', value: search, onChange: e => setSearch(e.target.value) })
       ),
       React.createElement('div', { className: 'view-toggle' },
-        React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, '⊞'),
-        React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, '☰')
+        React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph ph-grid-four' })),
+        React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph ph-list' }))
       )
     ),
     /* filter bar */
@@ -4047,7 +4094,7 @@ function EventsPage({ db, showToast, externalShowForm, onExternalFormClose }) {
   return React.createElement(React.Fragment, null,
     React.createElement('div', { className: 'toolbar' },
       React.createElement('div', { className: 'search-wrap' },
-        React.createElement('span', { className: 'search-icon' }, '🔍'),
+        React.createElement('i', { className: 'ph ph-magnifying-glass search-icon' }),
         React.createElement('input', { type: 'text', placeholder: '搜尋名稱、藝人或地點…', value: search, onChange: e => setSearch(e.target.value) })
       )
     ),
@@ -4334,6 +4381,7 @@ function App() {
   const [authorPage, setAuthorPage] = useState(null);
   const [page, setPage] = useState('shelf');
   const [showThemePicker, setShowThemePicker] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [showNavMenu, setShowNavMenu] = useState(false);
   const [shelfView, setShelfView] = useState('books'); // 'books' | 'authors'
   const [collShowForm, setCollShowForm] = useState(false);
@@ -4475,7 +4523,8 @@ function App() {
               className: 'nav-dropdown-btn',
               onClick: e => { e.stopPropagation(); setShowNavMenu(v => !v); }
             },
-              page === 'shelf' ? '📚 書架' : page === 'progress' ? '📊 讀書進度' : page === 'drama-progress' ? '📺 觀劇進度' : page === 'events' ? '🎫 演出紀錄' : page === 'achievements' ? '🎖️ 成就' : '🎬 觀劇',
+              React.createElement('i', { className: `ph ph-${{ shelf:'books', progress:'chart-bar', collection:'film-clapperboard', 'drama-progress':'television-simple', events:'ticket', achievements:'medal' }[page] || 'books'}`, style: { fontSize: '1rem', marginRight: '4px' } }),
+              { shelf:'書架', progress:'讀書進度', collection:'觀劇', 'drama-progress':'觀劇進度', events:'演出紀錄', achievements:'成就' }[page] || '書架',
               React.createElement('span', { className: 'nav-dropdown-arrow' + (showNavMenu ? ' open' : '') }, '▼')
             ),
             showNavMenu && React.createElement('div', { className: 'nav-dropdown-menu' },
@@ -4564,15 +4613,15 @@ function App() {
         React.createElement('button', {
           className: 'shelf-toggle-btn' + (shelfView === 'books' ? ' active' : ''),
           onClick: () => setShelfView('books')
-        }, '📚 書籍'),
+        }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-books', style: { marginRight: '4px' } }), '書籍')),
         React.createElement('button', {
           className: 'shelf-toggle-btn' + (shelfView === 'authors' ? ' active' : ''),
           onClick: () => setShelfView('authors')
-        }, '作者'),
+        }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-user', style: { marginRight: '4px' } }), '作者')),
         React.createElement('button', {
           className: 'shelf-toggle-btn' + (shelfView === 'wishlist' ? ' active' : ''),
           onClick: () => setShelfView('wishlist')
-        }, '🛒 願望清單')
+        }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-shopping-cart', style: { marginRight: '4px' } }), '願望清單'))
       ),
 
       /* status tabs */
@@ -4595,7 +4644,7 @@ function App() {
       /* toolbar */
       React.createElement('div', { className: 'toolbar' },
         React.createElement('div', { className: 'search-wrap' },
-          React.createElement('span', { className: 'search-icon' }, '🔍'),
+          React.createElement('i', { className: 'ph ph-magnifying-glass search-icon' }),
           React.createElement('input', {
             type: 'text', placeholder: '搜尋書名、作者或標籤…',
             value: search, onChange: e => setSearch(e.target.value)
@@ -4608,8 +4657,8 @@ function App() {
           React.createElement('option', { key: c, value: c }, c === 'all' ? '全部分類' : c)
         )),
         React.createElement('div', { className: 'view-toggle' },
-          React.createElement('button', { className: `view-btn${view==='grid' ? ' active' : ''}`, onClick: () => setView('grid') }, '⊞'),
-          React.createElement('button', { className: `view-btn${view==='list' ? ' active' : ''}`, onClick: () => setView('list') }, '☰')
+          React.createElement('button', { className: `view-btn${view==='grid' ? ' active' : ''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph ph-grid-four' })),
+          React.createElement('button', { className: `view-btn${view==='list' ? ' active' : ''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph ph-list' }))
         )
       ),
 
@@ -4675,6 +4724,48 @@ function App() {
                   filtered.map(b => React.createElement(BookListItem, { key: b.id, book: b }))
                 )
     )   /* end shelf Fragment */
+    ),
+
+    /* Settings Panel */
+    showSettings && React.createElement(React.Fragment, null,
+      React.createElement('div', { className: 'settings-overlay', onClick: () => setShowSettings(false) }),
+      React.createElement('div', { className: 'settings-panel' },
+        React.createElement('div', { className: 'settings-header' },
+          React.createElement('span', { className: 'settings-title' },
+            React.createElement('i', { className: 'ph ph-gear', style: { marginRight: '8px', verticalAlign: 'middle' } }),
+            '設定'
+          ),
+          React.createElement('button', { className: 'modal-close', onClick: () => setShowSettings(false) }, '✕')
+        ),
+        /* Theme section */
+        React.createElement('div', { className: 'settings-section' },
+          React.createElement('div', { className: 'settings-section-title' }, '佈景主題'),
+          React.createElement('div', { className: 'theme-grid' },
+            React.createElement('div', { className: 'theme-category-sep' }, '☀️ 淺色'),
+            THEMES.filter(t => !t.dark).map(t =>
+              React.createElement('button', {
+                key: t.id,
+                className: 'theme-grid-item' + (theme === t.id ? ' active' : ''),
+                onClick: () => setTheme(t.id)
+              },
+                React.createElement('span', { className: 'theme-grid-swatch', style: { background: t.color } }),
+                t.label
+              )
+            ),
+            React.createElement('div', { className: 'theme-category-sep' }, '🌙 深色'),
+            THEMES.filter(t => t.dark).map(t =>
+              React.createElement('button', {
+                key: t.id,
+                className: 'theme-grid-item' + (theme === t.id ? ' active' : ''),
+                onClick: () => setTheme(t.id)
+              },
+                React.createElement('span', { className: 'theme-grid-swatch', style: { background: t.color } }),
+                t.label
+              )
+            )
+          )
+        )
+      )
     ),
 
     /* FAB */
