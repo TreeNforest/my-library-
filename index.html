@@ -1348,6 +1348,53 @@
     margin-bottom: 16px; font-size: 0.88rem; color: var(--text2);
   }
   .wish-total-num { font-size: 1.2rem; font-weight: 500; color: var(--accent); }
+
+  /* ── Achievements ── */
+  .ach-section { margin-bottom: 28px; }
+  .ach-section-title {
+    font-size: 0.82rem; color: var(--text3); letter-spacing: 0.08em;
+    margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+  }
+  .ach-section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .ach-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .ach-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 8px;
+    text-align: center; position: relative;
+    transition: transform var(--trans), box-shadow var(--trans);
+    animation: cardIn 0.35s ease both;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .ach-card.unlocked { border-color: var(--accent); }
+  .ach-card.unlocked:hover { transform: translateY(-3px); box-shadow: 0 6px 18px var(--shadow2); }
+  .ach-card.locked { opacity: 0.5; filter: grayscale(0.4); }
+  .ach-img-wrap {
+    width: 64px; height: 64px; border-radius: 50%; overflow: hidden;
+    background: var(--bg3); display: flex; align-items: center; justify-content: center;
+    font-size: 1.8rem; margin-bottom: 4px; flex-shrink: 0;
+    border: 2px solid var(--border);
+  }
+  .ach-card.unlocked .ach-img-wrap { border-color: var(--accent); box-shadow: 0 0 10px var(--shadow); }
+  .ach-img-wrap img { width: 100%; height: 100%; object-fit: cover; }
+  .ach-name { font-size: 0.8rem; font-weight: 500; color: var(--text); line-height: 1.3; }
+  .ach-desc { font-size: 0.68rem; color: var(--text3); line-height: 1.3; }
+  .ach-status {
+    font-size: 0.65rem; padding: 2px 7px; border-radius: 10px; margin-top: 2px;
+  }
+  .ach-status.done { background: var(--accent); color: #fff; }
+  .ach-status.in-progress { background: var(--bg3); color: var(--text2); }
+  .ach-status.locked { background: var(--bg3); color: var(--text3); }
+  .ach-progress-bar { width: 100%; height: 3px; background: var(--bg3); border-radius: 2px; margin-top: 2px; }
+  .ach-progress-fill { height: 100%; border-radius: 2px; background: var(--accent); }
+  /* custom achievement */
+  .ach-custom-btn {
+    width: 64px; height: 64px; border-radius: 50%;
+    border: 2px dashed var(--border); background: none;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; color: var(--text3); cursor: pointer; margin-bottom: 4px;
+    transition: border-color var(--trans);
+  }
+  .ach-custom-btn:hover { border-color: var(--accent); color: var(--accent); }
   /* ── Responsive ── */
   @media (max-width: 600px) {
     .form-group.full { grid-column: 1; }
@@ -3213,6 +3260,186 @@ function WishlistPage({ db, showToast, books, externalShowForm, onExternalFormCl
   );
 }
 
+/* ── AchievementsPage ── */
+function AchievementsPage({ books, dramas, db, showToast }) {
+  const [customAchs, setCustomAchs] = useState([]);
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customForm, setCustomForm] = useState({ name: '', desc: '', imgUrl: '' });
+  const [customPreview, setCustomPreview] = useState('');
+  const [savingCustom, setSavingCustom] = useState(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'achievements'), snap => {
+      setCustomAchs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, []);
+
+  // ── Stats from data ──
+  const doneBooks   = books.filter(b => b.status === 'done').length;
+  const doneDramas  = dramas.filter(d => d.status === 'done').length;
+  const ratedBooks  = books.filter(b => b.rating === 5).length;
+  const notes50     = books.filter(b => b.notes && b.notes.length > 10).length;
+  const fiveRated   = dramas.filter(d => d.rating === 5).length;
+  const allCats     = new Set([...books.map(b => b.category), ...dramas.map(d => d.type)].filter(Boolean));
+  const koreanDramas = dramas.filter(d => d.type?.includes('韓') || d.type?.includes('Korean')).length;
+
+  // ── Built-in achievements ──
+  const ACHIEVEMENTS = [
+    /* Reading */
+    { id: 'r1', cat: '📚 閱讀成就', name: '初次閱讀',   desc: '完成第1本書',   icon: '📖', total: 1,   current: doneBooks,  img: 'ach_r1.png' },
+    { id: 'r2', cat: '📚 閱讀成就', name: '愛書人',     desc: '完成10本書',   icon: '📚', total: 10,  current: doneBooks,  img: 'ach_r2.png' },
+    { id: 'r3', cat: '📚 閱讀成就', name: '閱讀達人',   desc: '完成50本書',   icon: '🎓', total: 50,  current: doneBooks,  img: 'ach_r3.png' },
+    { id: 'r4', cat: '📚 閱讀成就', name: '書海探險家', desc: '完成100本書',  icon: '🗺️', total: 100, current: doneBooks,  img: 'ach_r4.png' },
+    { id: 'r5', cat: '📚 閱讀成就', name: '傳奇藏書家', desc: '完成200本書',  icon: '👑', total: 200, current: doneBooks,  img: 'ach_r5.png' },
+    /* Drama */
+    { id: 'd1', cat: '🎬 觀劇成就', name: '追劇新手',   desc: '完成第1部劇',  icon: '🎬', total: 1,   current: doneDramas, img: 'ach_d1.png' },
+    { id: 'd2', cat: '🎬 觀劇成就', name: '週末馬拉松', desc: '完成10部劇',   icon: '🛋️', total: 10,  current: doneDramas, img: 'ach_d2.png' },
+    { id: 'd3', cat: '🎬 觀劇成就', name: '韓劇迷',     desc: '完成20部韓劇', icon: '🇰🇷', total: 20,  current: koreanDramas, img: 'ach_d3.png' },
+    { id: 'd4', cat: '🎬 觀劇成就', name: '劇荒終結者', desc: '完成50部劇',   icon: '🏆', total: 50,  current: doneDramas, img: 'ach_d4.png' },
+    /* Rating */
+    { id: 'v1', cat: '⭐ 評分成就', name: '神作收藏家', desc: '10部五星作品',  icon: '⭐', total: 10,  current: ratedBooks + fiveRated, img: 'ach_v1.png' },
+    { id: 'v2', cat: '⭐ 評分成就', name: '品味獨特',   desc: '留下50則心得', icon: '✍️', total: 50,  current: notes50,    img: 'ach_v2.png' },
+    /* Explore */
+    { id: 'e1', cat: '🔍 探索成就', name: '類型探索家', desc: '涉獵5種不同類型', icon: '🧭', total: 5,  current: allCats.size, img: 'ach_e1.png' },
+    { id: 'e2', cat: '🔍 探索成就', name: '世界旅行家', desc: '看過10國作品',  icon: '🌍', total: 10, current: 0,          img: 'ach_e2.png' },
+  ];
+
+  // Group by category
+  const cats = {};
+  ACHIEVEMENTS.forEach(a => {
+    if (!cats[a.cat]) cats[a.cat] = [];
+    cats[a.cat].push(a);
+  });
+
+  const AchCard = ({ a }) => {
+    const pct      = Math.min(1, a.current / a.total);
+    const unlocked = a.current >= a.total;
+    const inProg   = !unlocked && a.current > 0;
+    return React.createElement('div', { className: 'ach-card' + (unlocked ? ' unlocked' : ' locked') },
+      /* badge image */
+      React.createElement('div', { className: 'ach-img-wrap' },
+        React.createElement('img', {
+          src: a.img, alt: a.name,
+          onError: e => { e.target.style.display='none'; e.target.parentNode.innerHTML = a.icon; }
+        })
+      ),
+      React.createElement('div', { className: 'ach-name' }, a.name),
+      React.createElement('div', { className: 'ach-desc' }, a.desc),
+      unlocked
+        ? React.createElement('div', { className: 'ach-status done' }, '✅ 已獲得')
+        : inProg
+          ? React.createElement(React.Fragment, null,
+              React.createElement('div', { className: 'ach-progress-bar' },
+                React.createElement('div', { className: 'ach-progress-fill', style: { width: (pct*100)+'%' } })
+              ),
+              React.createElement('div', { className: 'ach-status in-progress' }, `${a.current}/${a.total}`)
+            )
+          : React.createElement('div', { className: 'ach-status locked' }, '🔒 未解鎖')
+    );
+  };
+
+  const handleCustomCover = async e => {
+    const file = e.target.files[0]; if (!file) return;
+    const b64 = await compressImage(file, 300);
+    setCustomPreview(b64);
+    setCustomForm(f => ({ ...f, imgUrl: b64 }));
+  };
+
+  const handleCustomSave = async () => {
+    if (!customForm.name.trim()) return;
+    setSavingCustom(true);
+    await addDoc(collection(db, 'achievements'), {
+      ...customForm, unlocked: true, createdAt: serverTimestamp()
+    });
+    setCustomForm({ name: '', desc: '', imgUrl: '' });
+    setCustomPreview('');
+    setShowCustomForm(false);
+    setSavingCustom(false);
+    showToast('成就已新增！');
+  };
+
+  const handleDeleteCustom = async id => {
+    if (!confirm('確定刪除這個成就？')) return;
+    await deleteDoc(doc(db, 'achievements', id));
+    showToast('已刪除');
+  };
+
+  return React.createElement('div', null,
+    /* built-in achievements */
+    Object.entries(cats).map(([cat, achs]) =>
+      React.createElement('div', { key: cat, className: 'ach-section' },
+        React.createElement('div', { className: 'ach-section-title' }, cat),
+        React.createElement('div', { className: 'ach-grid' },
+          achs.map(a => React.createElement(AchCard, { key: a.id, a }))
+        )
+      )
+    ),
+
+    /* custom achievements */
+    React.createElement('div', { className: 'ach-section' },
+      React.createElement('div', { className: 'ach-section-title' }, '🌟 自訂成就'),
+      React.createElement('div', { className: 'ach-grid' },
+        customAchs.map(a =>
+          React.createElement('div', { key: a.id, className: 'ach-card unlocked', onLongPress: () => {} },
+            React.createElement('div', { className: 'ach-img-wrap' },
+              a.imgUrl
+                ? React.createElement('img', { src: a.imgUrl, alt: a.name })
+                : React.createElement('span', null, '🏅')
+            ),
+            React.createElement('div', { className: 'ach-name' }, a.name),
+            React.createElement('div', { className: 'ach-desc' }, a.desc),
+            React.createElement('div', { className: 'ach-status done' }, '✅ 已獲得'),
+            React.createElement('button', {
+              style: { fontSize: '0.65rem', color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', marginTop: '2px' },
+              onClick: () => handleDeleteCustom(a.id)
+            }, '刪除')
+          )
+        ),
+        /* add button */
+        React.createElement('div', { className: 'ach-card', style: { cursor: 'pointer' }, onClick: () => setShowCustomForm(true) },
+          React.createElement('button', { className: 'ach-custom-btn' }, '＋'),
+          React.createElement('div', { className: 'ach-name' }, '新增成就'),
+          React.createElement('div', { className: 'ach-desc' }, '自訂專屬徽章')
+        )
+      )
+    ),
+
+    /* custom form modal */
+    showCustomForm && React.createElement('div', { className: 'modal-overlay', onClick: e => e.target === e.currentTarget && setShowCustomForm(false) },
+      React.createElement('div', { className: 'modal' },
+        React.createElement('div', { className: 'modal-header' },
+          React.createElement('span', { className: 'modal-title' }, '新增自訂成就'),
+          React.createElement('button', { className: 'modal-close', onClick: () => setShowCustomForm(false) }, '✕')
+        ),
+        React.createElement('div', { className: 'form-grid' },
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '成就名稱'),
+            React.createElement('input', { className: 'form-input', value: customForm.name, onChange: e => setCustomForm(f => ({ ...f, name: e.target.value })), placeholder: '例：第一次看完全集' })
+          ),
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '描述'),
+            React.createElement('input', { className: 'form-input', value: customForm.desc, onChange: e => setCustomForm(f => ({ ...f, desc: e.target.value })), placeholder: '簡單描述這個成就' })
+          ),
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '徽章圖片'),
+            React.createElement('div', { className: 'cover-upload' },
+              React.createElement('input', { type: 'file', accept: 'image/*', onChange: handleCustomCover }),
+              React.createElement('div', { className: 'cover-upload-icon' }, '🖼'),
+              React.createElement('div', { className: 'cover-upload-text' }, customPreview ? '點擊更換' : '上傳徽章圖片'),
+              customPreview && React.createElement('img', { className: 'cover-preview', src: customPreview, alt: '' })
+            )
+          )
+        ),
+        React.createElement('div', { className: 'form-actions' },
+          React.createElement('button', { className: 'btn-secondary', onClick: () => setShowCustomForm(false) }, '取消'),
+          React.createElement('button', { className: 'btn-primary', onClick: handleCustomSave, disabled: savingCustom }, savingCustom ? '儲存中…' : '新增')
+        )
+      )
+    )
+  );
+}
+
 /* ── Main App ── */
 
 /* ── DramaCalendar ── */
@@ -4248,7 +4475,7 @@ function App() {
               className: 'nav-dropdown-btn',
               onClick: e => { e.stopPropagation(); setShowNavMenu(v => !v); }
             },
-              page === 'shelf' ? '📚 書架' : page === 'progress' ? '📊 讀書進度' : page === 'drama-progress' ? '📺 觀劇進度' : page === 'events' ? '🎫 演出紀錄' : '🎬 觀劇',
+              page === 'shelf' ? '📚 書架' : page === 'progress' ? '📊 讀書進度' : page === 'drama-progress' ? '📺 觀劇進度' : page === 'events' ? '🎫 演出紀錄' : page === 'achievements' ? '🎖️ 成就' : '🎬 觀劇',
               React.createElement('span', { className: 'nav-dropdown-arrow' + (showNavMenu ? ' open' : '') }, '▼')
             ),
             showNavMenu && React.createElement('div', { className: 'nav-dropdown-menu' },
@@ -4258,6 +4485,7 @@ function App() {
                 { id: 'collection',      label: '🎬 觀劇' },
                 { id: 'drama-progress', label: '📺 觀劇進度' },
                 { id: 'events',         label: '🎫 演出紀錄' },
+                { id: 'achievements',   label: '🎖️ 成就' },
               ].map(p =>
                 React.createElement('button', {
                   key: p.id,
@@ -4313,6 +4541,8 @@ function App() {
         ? React.createElement(DramaLogPage, { dramas: items, db, showToast })
         : page === 'events'
         ? React.createElement(EventsPage, { db, showToast, externalShowForm: eventsShowForm, onExternalFormClose: () => setEventsShowForm(false) })
+        : page === 'achievements'
+        ? React.createElement(AchievementsPage, { books, dramas: items, db, showToast })
         : page === 'progress'
         ? React.createElement(ReadingLogPage, { books, db, showToast })
         : React.createElement(React.Fragment, null,
