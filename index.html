@@ -1444,11 +1444,11 @@
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); padding: 14px 16px;
   }
-  .streak-label { font-size: 0.72rem; color: var(--text3); letter-spacing: 0.04em; margin-bottom: 6px; }
+  .streak-label { font-size: 0.8rem; color: var(--text2); letter-spacing: 0.03em; margin-bottom: 6px; }
   .streak-num { font-size: 1.6rem; font-weight: 500; line-height: 1; margin-bottom: 2px; }
   .streak-num.book { color: var(--accent); }
   .streak-num.drama { color: var(--accent3); }
-  .streak-sub { font-size: 0.72rem; color: var(--text3); }
+  .streak-sub { font-size: 0.76rem; color: var(--text3); }
   /* streak calendar */
   .streak-cal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
   .streak-cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -1458,17 +1458,17 @@
   .streak-cal-day {
     aspect-ratio: 1; border-radius: 4px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 0.72rem; color: var(--text3); position: relative;
+    font-size: 0.78rem; color: var(--text3); position: relative;
     flex-direction: column; gap: 1px;
   }
   .streak-cal-day.today { border: 1.5px solid var(--accent); color: var(--text); font-weight: 500; }
   .streak-cal-day.other-month { opacity: 0.3; }
   .streak-dot-row { display: flex; gap: 2px; justify-content: center; }
-  .streak-dot { width: 5px; height: 5px; border-radius: 50%; }
-  .streak-dot.book  { background: var(--accent); }
-  .streak-dot.drama { background: var(--accent3); }
+  .streak-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .streak-dot.book  { background: #5a9a6a; }
+  .streak-dot.drama { background: #e07040; }
   .streak-legend { display: flex; gap: 12px; margin-top: 10px; }
-  .streak-legend-item { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: var(--text3); }
+  .streak-legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--text2); }
   /* ── Responsive ── */
   @media (max-width: 600px) {
     .form-group.full { grid-column: 1; }
@@ -4144,6 +4144,7 @@ function EventDetail({ item, onClose, onEdit }) {
   const cat = EVENT_CATS[item.category] || EVENT_CATS.concert;
   const scrollRef = React.useRef(null);
   const [imgOpacity, setImgOpacity] = useState(1);
+  const [lightbox, setLightbox] = useState(false);
   const handleScroll = () => {
     if (!scrollRef.current) return;
     setImgOpacity(Math.max(0, 1 - scrollRef.current.scrollTop / 200));
@@ -4326,7 +4327,7 @@ function ProgressPage({ books, dramas, db, showToast }) {
         onClick: () => setTab('dramas')
       },
         React.createElement('i', { className: 'ph ph-video', style: { marginRight: '4px' } }),
-        '觀劇進度'
+        '進度'
       )
     ),
     tab === 'books'
@@ -4703,8 +4704,8 @@ function App() {
               className: 'nav-dropdown-btn',
               onClick: e => { e.stopPropagation(); setShowNavMenu(v => !v); }
             },
-              React.createElement('i', { className: `ph ph-${{ shelf:'books', progress:'chart-bar', collection:'video', 'drama-progress':'television-simple', events:'ticket', achievements:'medal' }[page] || 'books'}`, style: { fontSize: '1rem', marginRight: '4px' } }),
-              { shelf:'書架', progress:'讀書進度', collection:'觀劇', 'drama-progress':'觀劇進度', events:'演出紀錄', achievements:'成就' }[page] || '書架',
+              React.createElement('i', { className: `ph ph-${{ shelf:'books', progress:'chart-bar', collection:'video', events:'ticket', achievements:'medal' }[page] || 'books'}`, style: { fontSize: '1rem', marginRight: '4px' } }),
+              { shelf:'書架', progress:'進度', collection:'觀劇', events:'演出紀錄', achievements:'成就' }[page] || '書架',
               React.createElement('span', { className: 'nav-dropdown-arrow' + (showNavMenu ? ' open' : '') }, '▼')
             ),
             showNavMenu && React.createElement('div', { className: 'nav-dropdown-menu' },
@@ -4712,7 +4713,6 @@ function App() {
                 { id: 'shelf',      label: '📚 書架' },
                 { id: 'progress',   label: '📊 進度' },
                 { id: 'collection',      label: '🎬 觀劇' },
-                { id: 'drama-progress', label: '📺 觀劇進度' },
                 { id: 'events',         label: '🎫 演出紀錄' },
                 { id: 'achievements',   label: '🎖️ 成就' },
               ].map(p =>
