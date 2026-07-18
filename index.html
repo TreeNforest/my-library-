@@ -1436,6 +1436,39 @@
   .theme-grid-item.active { border-color: var(--accent); color: var(--accent); font-weight: 500; background: var(--bg3); }
   .theme-grid-swatch { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
   .theme-category-sep { grid-column: 1/-1; font-size: 0.7rem; color: var(--text3); letter-spacing: 0.06em; margin: 4px 0 2px; }
+
+  /* ── Streak ── */
+  .streak-section { margin-bottom: 24px; }
+  .streak-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .streak-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px;
+  }
+  .streak-label { font-size: 0.72rem; color: var(--text3); letter-spacing: 0.04em; margin-bottom: 6px; }
+  .streak-num { font-size: 1.6rem; font-weight: 500; line-height: 1; margin-bottom: 2px; }
+  .streak-num.book { color: var(--accent); }
+  .streak-num.drama { color: var(--accent3); }
+  .streak-sub { font-size: 0.72rem; color: var(--text3); }
+  /* streak calendar */
+  .streak-cal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+  .streak-cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .streak-cal-title { font-size: 0.9rem; font-weight: 500; }
+  .streak-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .streak-cal-dow { text-align: center; font-size: 0.65rem; color: var(--text3); padding: 3px 0; }
+  .streak-cal-day {
+    aspect-ratio: 1; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; color: var(--text3); position: relative;
+    flex-direction: column; gap: 1px;
+  }
+  .streak-cal-day.today { border: 1.5px solid var(--accent); color: var(--text); font-weight: 500; }
+  .streak-cal-day.other-month { opacity: 0.3; }
+  .streak-dot-row { display: flex; gap: 2px; justify-content: center; }
+  .streak-dot { width: 5px; height: 5px; border-radius: 50%; }
+  .streak-dot.book  { background: var(--accent); }
+  .streak-dot.drama { background: var(--accent3); }
+  .streak-legend { display: flex; gap: 12px; margin-top: 10px; }
+  .streak-legend-item { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: var(--text3); }
   /* ── Responsive ── */
   @media (max-width: 600px) {
     .form-group.full { grid-column: 1; }
@@ -3322,6 +3355,88 @@ function AchievementsPage({ books, dramas, db, showToast }) {
     return unsub;
   }, []);
 
+  // ── Load all logs for streak calculation ──
+  const [bookLogDates, setBookLogDates]   = useState(new Set());
+  const [dramaLogDates, setDramaLogDates] = useState(new Set());
+  const [calMonth, setCalMonth] = useState(new Date().getMonth());
+  const [calYear,  setCalYear]  = useState(new Date().getFullYear());
+
+  useEffect(() => {
+    if (!books.length) return;
+    const unsubs = books.map(b =>
+      onSnapshot(collection(db, 'books', b.id, 'logs'), snap => {
+        const dates = snap.docs.map(d => d.data().date).filter(Boolean);
+        setBookLogDates(prev => new Set([...prev, ...dates]));
+      })
+    );
+    return () => unsubs.forEach(u => u());
+  }, [books]);
+
+  useEffect(() => {
+    if (!dramas.length) return;
+    const unsubs = dramas.map(d =>
+      onSnapshot(collection(db, 'dramas', d.id, 'logs'), snap => {
+        const dates = snap.docs.map(doc => doc.data().date).filter(Boolean);
+        setDramaLogDates(prev => new Set([...prev, ...dates]));
+      })
+    );
+    return () => unsubs.forEach(u => u());
+  }, [dramas]);
+
+  // Streak calc
+  const calcStreak = dates => {
+    if (!dates.size) return { current: 0, longest: 0, longestStart: '', longestEnd: '' };
+    const sorted = [...dates].sort();
+    const today = new Date();
+    let cur = 0, longest = 0, longestStart = '', longestEnd = '';
+    let streak = 1, start = sorted[0];
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = new Date(sorted[i-1]), curr = new Date(sorted[i]);
+      const diff = (curr - prev) / 86400000;
+      if (diff === 1) { streak++; }
+      else { if (streak > longest) { longest = streak; longestStart = start; longestEnd = sorted[i-1]; } streak = 1; start = sorted[i]; }
+    }
+    if (streak > longest) { longest = streak; longestStart = start; longestEnd = sorted[sorted.length-1]; }
+    // current streak (must include today or yesterday)
+    const todayStr = today.toISOString().slice(0,10);
+    const yestStr  = new Date(today - 86400000).toISOString().slice(0,10);
+    if (dates.has(todayStr) || dates.has(yestStr)) {
+      let c = 1, d = new Date(dates.has(todayStr) ? todayStr : yestStr);
+      while (true) {
+        d = new Date(d - 86400000);
+        const ds = d.toISOString().slice(0,10);
+        if (dates.has(ds)) c++; else break;
+      }
+      cur = c;
+    }
+    return { current: cur, longest, longestStart, longestEnd };
+  };
+
+  const bookStreak  = calcStreak(bookLogDates);
+  const dramaStreak = calcStreak(dramaLogDates);
+
+  // Calendar
+  const pad = n => String(n).padStart(2,'0');
+  const firstDay    = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const daysInPrev  = new Date(calYear, calMonth, 0).getDate();
+  const todayStr    = new Date().toISOString().slice(0,10);
+  const MONTHS_ZH   = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  const DOWS        = ['日','一','二','三','四','五','六'];
+
+  const calCells = [];
+  for (let i = 0; i < firstDay; i++) {
+    const d = daysInPrev - firstDay + 1 + i;
+    calCells.push({ day: d, ds: `${calMonth===0?calYear-1:calYear}-${pad(calMonth===0?12:calMonth)}-${pad(d)}`, thisMonth: false });
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    calCells.push({ day: d, ds: `${calYear}-${pad(calMonth+1)}-${pad(d)}`, thisMonth: true });
+  }
+  const remaining = 42 - calCells.length;
+  for (let d = 1; d <= remaining; d++) {
+    calCells.push({ day: d, ds: `${calMonth===11?calYear+1:calYear}-${pad(calMonth===11?1:calMonth+2)}-${pad(d)}`, thisMonth: false });
+  }
+
   // ── Stats from data ──
   const doneBooks   = books.filter(b => b.status === 'done').length;
   const doneDramas  = dramas.filter(d => d.status === 'done').length;
@@ -3413,6 +3528,65 @@ function AchievementsPage({ books, dramas, db, showToast }) {
   };
 
   return React.createElement('div', null,
+    /* ── Streak section ── */
+    React.createElement('div', { className: 'streak-section' },
+      React.createElement('div', { className: 'ach-section-title' }, '🔥 連續記錄天數'),
+      React.createElement('div', { className: 'streak-cards' },
+        /* book streak */
+        React.createElement('div', { className: 'streak-card' },
+          React.createElement('div', { className: 'streak-label' }, '📖 讀書'),
+          React.createElement('div', { className: 'streak-num book' }, bookStreak.current + ' 天'),
+          React.createElement('div', { className: 'streak-sub' }, '當前連續'),
+          React.createElement('div', { style: { marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border)' } },
+            React.createElement('div', { className: 'streak-sub' }, '最長 ' + bookStreak.longest + ' 天'),
+            bookStreak.longestStart && React.createElement('div', { className: 'streak-sub' }, bookStreak.longestStart + ' ~ ' + bookStreak.longestEnd)
+          )
+        ),
+        /* drama streak */
+        React.createElement('div', { className: 'streak-card' },
+          React.createElement('div', { className: 'streak-label' }, '🎬 觀劇'),
+          React.createElement('div', { className: 'streak-num drama' }, dramaStreak.current + ' 天'),
+          React.createElement('div', { className: 'streak-sub' }, '當前連續'),
+          React.createElement('div', { style: { marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border)' } },
+            React.createElement('div', { className: 'streak-sub' }, '最長 ' + dramaStreak.longest + ' 天'),
+            dramaStreak.longestStart && React.createElement('div', { className: 'streak-sub' }, dramaStreak.longestStart + ' ~ ' + dramaStreak.longestEnd)
+          )
+        )
+      ),
+      /* calendar */
+      React.createElement('div', { className: 'streak-cal' },
+        React.createElement('div', { className: 'streak-cal-header' },
+          React.createElement('button', { className: 'drama-cal-nav', onClick: () => { if (calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1); } }, '‹'),
+          React.createElement('span', { className: 'streak-cal-title' }, `${calYear} ${MONTHS_ZH[calMonth]}`),
+          React.createElement('button', { className: 'drama-cal-nav', onClick: () => { if (calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1); } }, '›')
+        ),
+        React.createElement('div', { className: 'streak-cal-grid' },
+          DOWS.map(d => React.createElement('div', { key: d, className: 'streak-cal-dow' }, d)),
+          calCells.map((cell, i) => {
+            const hasBook  = bookLogDates.has(cell.ds);
+            const hasDrama = dramaLogDates.has(cell.ds);
+            return React.createElement('div', {
+              key: i,
+              className: 'streak-cal-day' + (!cell.thisMonth ? ' other-month' : '') + (cell.ds === todayStr ? ' today' : '')
+            },
+              cell.day,
+              (hasBook || hasDrama) && React.createElement('div', { className: 'streak-dot-row' },
+                hasBook  && React.createElement('div', { className: 'streak-dot book' }),
+                hasDrama && React.createElement('div', { className: 'streak-dot drama' })
+              )
+            );
+          })
+        ),
+        React.createElement('div', { className: 'streak-legend' },
+          React.createElement('div', { className: 'streak-legend-item' },
+            React.createElement('div', { className: 'streak-dot book' }), '讀書'
+          ),
+          React.createElement('div', { className: 'streak-legend-item' },
+            React.createElement('div', { className: 'streak-dot drama' }), '觀劇'
+          )
+        )
+      )
+    ),
     /* built-in achievements */
     Object.entries(cats).map(([cat, achs]) =>
       React.createElement('div', { key: cat, className: 'ach-section' },
@@ -4137,21 +4311,27 @@ function EventsPage({ db, showToast, externalShowForm, onExternalFormClose }) {
 
 /* ── ProgressPage ── */
 function ProgressPage({ books, dramas, db, showToast }) {
-  const [tab, setTab] = useState('books'); // 'books' | 'dramas'
+  const [tab, setTab] = useState('books');
   return React.createElement('div', null,
     React.createElement('div', { className: 'shelf-toggle', style: { marginBottom: '20px' } },
       React.createElement('button', {
         className: 'shelf-toggle-btn' + (tab === 'books' ? ' active' : ''),
         onClick: () => setTab('books')
-      }, '📚 讀書進度'),
+      },
+        React.createElement('i', { className: 'ph ph-book-open', style: { marginRight: '4px' } }),
+        '讀書進度'
+      ),
       React.createElement('button', {
         className: 'shelf-toggle-btn' + (tab === 'dramas' ? ' active' : ''),
         onClick: () => setTab('dramas')
-      }, '📺 觀劇進度')
+      },
+        React.createElement('i', { className: 'ph ph-video', style: { marginRight: '4px' } }),
+        '觀劇進度'
+      )
     ),
     tab === 'books'
-      ? React.createElement(ProgressPage, { books, dramas: items, db, showToast })
-      : React.createElement(DramaLogPage, { dramas: items, db, showToast })
+      ? React.createElement(ReadingLogPage, { books, db, showToast })
+      : React.createElement(DramaLogPage, { dramas, db, showToast })
   );
 }
 
@@ -4558,14 +4738,12 @@ function App() {
     React.createElement('main', { className: 'main' },
       page === 'collection'
         ? React.createElement(DramaPage, { db, showToast, externalShowForm: collShowForm, onExternalFormClose: () => setCollShowForm(false) })
-        : page === 'drama-progress'
-        ? React.createElement(DramaLogPage, { dramas: items, db, showToast })
         : page === 'events'
         ? React.createElement(EventsPage, { db, showToast, externalShowForm: eventsShowForm, onExternalFormClose: () => setEventsShowForm(false) })
         : page === 'achievements'
         ? React.createElement(AchievementsPage, { books, dramas: items, db, showToast })
         : page === 'progress'
-        ? React.createElement(ReadingLogPage, { books, db, showToast })
+        ? React.createElement(ProgressPage, { books, dramas: items, db, showToast })
         : React.createElement(React.Fragment, null,
       /* stats */
       React.createElement('div', { className: 'stats-bar' },
