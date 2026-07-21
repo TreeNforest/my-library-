@@ -1469,6 +1469,42 @@
   .streak-dot.drama { background: #e07040; }
   .streak-legend { display: flex; gap: 12px; margin-top: 10px; }
   .streak-legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--text2); }
+
+  /* ── Borrow records ── */
+  .borrow-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px;
+    display: flex; flex-direction: column; gap: 8px;
+    animation: cardIn 0.35s ease both;
+  }
+  .borrow-card.overdue  { border-color: var(--danger); }
+  .borrow-card.due-soon { border-color: #c8902a; }
+  .borrow-card.returned { opacity: 0.6; }
+  .borrow-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .borrow-title { font-size: 0.95rem; font-weight: 500; flex: 1; }
+  .borrow-badge {
+    font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; flex-shrink: 0;
+    background: var(--bg3); color: var(--text2);
+  }
+  .borrow-badge.overdue  { background: var(--danger); color: #fff; }
+  .borrow-badge.due-soon { background: #c8902a; color: #fff; }
+  .borrow-badge.done     { background: var(--bg3); color: var(--text3); }
+  .borrow-meta { font-size: 0.78rem; color: var(--text3); display: flex; flex-wrap: wrap; gap: 8px; }
+  .borrow-meta-item { display: flex; align-items: center; gap: 3px; }
+  .borrow-actions { display: flex; gap: 8px; margin-top: 2px; }
+  .borrow-btn {
+    padding: 5px 14px; border-radius: 14px; font-size: 0.78rem;
+    font-family: 'CreamFont', serif; cursor: pointer;
+    transition: opacity var(--trans);
+  }
+  .borrow-btn.primary { background: var(--accent); color: #fff; border: none; }
+  .borrow-btn.primary:hover { opacity: 0.85; }
+  .borrow-btn.secondary { background: none; color: var(--text2); border: 1px solid var(--border); }
+  .borrow-section-sep {
+    font-size: 0.75rem; color: var(--text3); letter-spacing: 0.06em;
+    margin: 14px 0 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .borrow-section-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
   /* ── Responsive ── */
   @media (max-width: 600px) {
     .form-group.full { grid-column: 1; }
@@ -3135,6 +3171,193 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
   );
 }
 
+/* ── BorrowPage ── */
+function BorrowPage({ db, showToast, externalShowForm, onExternalFormClose }) {
+  const [items, setItems]       = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+
+  useEffect(() => { if (externalShowForm) { setShowForm(true); onExternalFormClose(); } }, [externalShowForm]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'borrows'), orderBy('dueDate', 'asc'));
+    const unsub = onSnapshot(q, snap => {
+      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, () => setLoading(false));
+    return unsub;
+  }, []);
+
+  const handleSave = async (item, data, del) => {
+    if (del) { await deleteDoc(doc(db, 'borrows', item.id)); showToast('已刪除'); return; }
+    if (item) { await updateDoc(doc(db, 'borrows', item.id), data); showToast('已更新'); }
+    else { await addDoc(collection(db, 'borrows'), data); showToast('已新增'); }
+  };
+
+  const handleReturn = async item => {
+    const today = new Date().toISOString().slice(0,10);
+    await updateDoc(doc(db, 'borrows', item.id), { returned: true, returnedDate: today });
+    showToast('已標記歸還 ✓');
+  };
+
+  const todayStr = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })();
+  const dueSoonStr = (() => { const n = new Date(); n.setDate(n.getDate()+7); return n.toISOString().slice(0,10); })();
+
+  const getStatus = item => {
+    if (item.returned) return 'returned';
+    if (!item.dueDate) return 'normal';
+    if (item.dueDate < todayStr) return 'overdue';
+    if (item.dueDate <= dueSoonStr) return 'due-soon';
+    return 'normal';
+  };
+
+  const getDaysLabel = item => {
+    if (item.returned) return '已歸還';
+    if (!item.dueDate) return '';
+    const diff = Math.ceil((new Date(item.dueDate) - new Date(todayStr)) / 86400000);
+    if (diff < 0) return `逾期 ${Math.abs(diff)} 天`;
+    if (diff === 0) return '今天到期！';
+    if (diff <= 7) return `還剩 ${diff} 天`;
+    return item.dueDate + ' 到期';
+  };
+
+  const TYPE_LABEL = { library: '📚 實體圖書館', online: '💻 線上借閱', friend: '👤 向朋友借' };
+
+  const BorrowForm = ({ item, onClose }) => {
+    const [form, setForm] = useState({
+      title:      item?.title      || '',
+      borrowFrom: item?.borrowFrom || '',
+      borrowType: item?.borrowType || 'library',
+      borrowDate: item?.borrowDate || todayStr,
+      dueDate:    item?.dueDate    || '',
+      notes:      item?.notes      || '',
+    });
+    const [saving, setSaving] = useState(false);
+    const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+    const submit = async () => {
+      if (!form.title.trim()) return;
+      setSaving(true);
+      try {
+        const data = { ...form, returned: item?.returned || false, updatedAt: serverTimestamp() };
+        if (!item) data.createdAt = serverTimestamp();
+        await handleSave(item, data, false);
+        setSaving(false); onClose();
+      } catch(e) { console.error(e); setSaving(false); }
+    };
+
+    return React.createElement('div', { className: 'modal-overlay', onClick: e => e.target === e.currentTarget && onClose() },
+      React.createElement('div', { className: 'modal' },
+        React.createElement('div', { className: 'modal-header' },
+          React.createElement('span', { className: 'modal-title' }, item ? '編輯借閱' : '新增借閱'),
+          React.createElement('button', { className: 'modal-close', onClick: onClose }, '✕')
+        ),
+        React.createElement('div', { className: 'form-grid' },
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '書名'),
+            React.createElement('input', { className: 'form-input', value: form.title, onChange: set('title'), placeholder: '借閱的書名' })
+          ),
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '借閱來源類型'),
+            React.createElement('div', { style: { display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' } },
+              [['library','📚 實體圖書館'], ['online','💻 線上借閱'], ['friend','👤 向朋友借']].map(([v, l]) =>
+                React.createElement('button', {
+                  key: v, type: 'button',
+                  className: 'status-tab' + (form.borrowType === v ? ' active' : ''),
+                  onClick: () => setForm(f => ({ ...f, borrowType: v }))
+                }, l)
+              )
+            ),
+            React.createElement('input', { className: 'form-input', value: form.borrowFrom, onChange: set('borrowFrom'), placeholder: '圖書館名稱或平台名稱' })
+          ),
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '借閱日期'),
+            React.createElement('input', { className: 'form-input', type: 'date', value: form.borrowDate, onChange: set('borrowDate') })
+          ),
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '應歸還日期'),
+            React.createElement('input', { className: 'form-input', type: 'date', value: form.dueDate, onChange: set('dueDate') })
+          ),
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '備註'),
+            React.createElement('textarea', { className: 'form-textarea', value: form.notes, onChange: set('notes'), placeholder: '備註…', style: { minHeight: '60px' } })
+          )
+        ),
+        React.createElement('div', { className: 'form-actions' },
+          item && React.createElement('button', {
+            className: 'btn-danger', style: { marginRight: 'auto' },
+            onClick: async () => { if (confirm('確定刪除？')) { await handleSave(item, null, true); onClose(); } }
+          }, '刪除'),
+          React.createElement('button', { className: 'btn-secondary', onClick: onClose }, '取消'),
+          React.createElement('button', { className: 'btn-primary', onClick: submit, disabled: saving }, saving ? '儲存中…' : '儲存')
+        )
+      )
+    );
+  };
+
+  const BorrowCard = ({ item }) => {
+    const status = getStatus(item);
+    const daysLabel = getDaysLabel(item);
+    return React.createElement('div', { className: `borrow-card${status === 'returned' ? ' returned' : status === 'overdue' ? ' overdue' : status === 'due-soon' ? ' due-soon' : ''}` },
+      React.createElement('div', { className: 'borrow-top' },
+        React.createElement('div', { className: 'borrow-title' }, item.title),
+        daysLabel && React.createElement('div', { className: `borrow-badge${status === 'overdue' ? ' overdue' : status === 'due-soon' ? ' due-soon' : status === 'returned' ? ' done' : ''}` }, daysLabel)
+      ),
+      React.createElement('div', { className: 'borrow-meta' },
+        (item.borrowFrom || item.borrowType) && React.createElement('span', { className: 'borrow-meta-item' },
+          React.createElement('i', { className: 'ph ph-map-pin' }),
+          item.borrowFrom || TYPE_LABEL[item.borrowType] || ''
+        ),
+        item.borrowDate && React.createElement('span', { className: 'borrow-meta-item' },
+          React.createElement('i', { className: 'ph ph-calendar' }),
+          item.borrowDate + ' 借入'
+        ),
+        item.dueDate && !item.returned && React.createElement('span', { className: 'borrow-meta-item' },
+          React.createElement('i', { className: 'ph ph-clock' }),
+          item.dueDate + ' 到期'
+        ),
+        item.returnedDate && React.createElement('span', { className: 'borrow-meta-item' },
+          React.createElement('i', { className: 'ph ph-check-circle' }),
+          item.returnedDate + ' 歸還'
+        )
+      ),
+      item.notes && React.createElement('div', { style: { fontSize: '0.78rem', color: 'var(--text3)' } }, item.notes),
+      React.createElement('div', { className: 'borrow-actions' },
+        React.createElement('button', { className: 'borrow-btn secondary', onClick: () => { setEditItem(item); setShowForm(true); } }, '編輯'),
+        !item.returned && React.createElement('button', { className: 'borrow-btn primary', onClick: () => handleReturn(item) }, '標記已歸還 →')
+      )
+    );
+  };
+
+  const borrowing = items.filter(i => !i.returned);
+  const returned  = items.filter(i => i.returned);
+
+  return React.createElement(React.Fragment, null,
+    loading
+      ? React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }), '載入中…')
+      : items.length === 0
+        ? React.createElement('div', { className: 'empty-state' },
+            React.createElement('div', { className: 'empty-icon' }, '📖'),
+            React.createElement('div', { className: 'empty-title' }, '還沒有借閱紀錄'),
+            React.createElement('div', { className: 'empty-desc' }, '點右下角 ＋ 新增借閱')
+          )
+        : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+            borrowing.length > 0 && React.createElement(React.Fragment, null,
+              React.createElement('div', { className: 'borrow-section-sep' }, `借閱中 (${borrowing.length})`),
+              borrowing.map(i => React.createElement(BorrowCard, { key: i.id, item: i }))
+            ),
+            returned.length > 0 && React.createElement(React.Fragment, null,
+              React.createElement('div', { className: 'borrow-section-sep' }, `已歸還 (${returned.length})`),
+              returned.map(i => React.createElement(BorrowCard, { key: i.id, item: i }))
+            )
+          ),
+    showForm && React.createElement(BorrowForm, {
+      item: editItem, onClose: () => { setShowForm(false); setEditItem(null); }
+    })
+  );
+}
+
 /* ── WishlistPage ── */
 function WishlistPage({ db, showToast, books, externalShowForm, onExternalFormClose }) {
   const [wishItems, setWishItems]   = useState([]);
@@ -4567,7 +4790,8 @@ function App() {
   const [shelfView, setShelfView] = useState('books'); // 'books' | 'authors'
   const [collShowForm, setCollShowForm] = useState(false);
   const [eventsShowForm, setEventsShowForm] = useState(false);
-  const [wishlistShowForm, setWishlistShowForm] = useState(false); // 'shelf' | 'progress'
+  const [wishlistShowForm, setWishlistShowForm] = useState(false);
+  const [borrowShowForm, setBorrowShowForm] = useState(false); // 'shelf' | 'progress'
   const [toastEl, showToast] = useToast();
 
   /* theme */
@@ -4771,7 +4995,11 @@ function App() {
         React.createElement('button', {
           className: 'shelf-toggle-btn' + (shelfView === 'wishlist' ? ' active' : ''),
           onClick: () => setShelfView('wishlist')
-        }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-shopping-cart', style: { marginRight: '4px' } }), '願望清單'))
+        }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-shopping-cart', style: { marginRight: '4px' } }), '願望清單')),
+        React.createElement('button', {
+          className: 'shelf-toggle-btn' + (shelfView === 'borrow' ? ' active' : ''),
+          onClick: () => setShelfView('borrow')
+        }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-book-bookmark', style: { marginRight: '4px' } }), '借閱'))
       ),
 
       /* status tabs */
@@ -4818,6 +5046,8 @@ function App() {
             React.createElement('div', { className: 'spinner' }),
             '載入中…'
           )
+        : shelfView === 'borrow'
+          ? React.createElement(BorrowPage, { db, showToast, externalShowForm: borrowShowForm, onExternalFormClose: () => setBorrowShowForm(false) })
         : shelfView === 'wishlist'
           ? React.createElement(WishlistPage, {
               db, showToast, books,
@@ -4923,6 +5153,7 @@ function App() {
       className: 'fab',
       onClick: () => {
         if (page === 'shelf' && shelfView === 'wishlist') { setWishlistShowForm(true); }
+        else if (page === 'shelf' && shelfView === 'borrow') { setBorrowShowForm(true); }
         else if (page === 'shelf') { setEditBook(null); setShowForm(true); }
         else if (page === 'collection') { setCollShowForm(true); }
         else { setEventsShowForm(true); }
