@@ -5238,11 +5238,31 @@ function App() {
               )
             )
           )
+        ),
+        /* Font size section */
+        React.createElement('div', { className: 'settings-section' },
+          React.createElement('div', { className: 'settings-section-title' }, '字體大小'),
+          React.createElement('div', { className: 'fontsize-grid' },
+            [
+              { id: 'xs', label: '極小', size: '10px' },
+              { id: 'sm', label: '小',   size: '13px' },
+              { id: 'md', label: '中',   size: '16px' },
+              { id: 'lg', label: '大',   size: '19px' },
+              { id: 'xl', label: '極大', size: '22px' },
+            ].map(f =>
+              React.createElement('button', {
+                key: f.id,
+                className: 'fontsize-btn' + (fontSize === f.id ? ' active' : ''),
+                onClick: () => setFontSize(f.id)
+              },
+                React.createElement('span', { className: 'fontsize-preview', style: { fontSize: f.size } }, '文'),
+                React.createElement('span', { style: { fontSize: '0.7rem' } }, f.label)
+              )
+            )
+          )
         )
       )
     ),
-
-    /* FAB */
     (page === 'shelf' || page === 'collection' || page === 'events' || page === 'borrow') && React.createElement('button', {
       className: 'fab',
       onClick: () => {
