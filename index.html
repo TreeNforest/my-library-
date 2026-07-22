@@ -1176,10 +1176,17 @@
   }
   .drama-detail-hero {
     position: relative; width: 100%;
-    padding: 24px 0 16px;
-    display: flex; justify-content: center; align-items: center;
+    padding: 24px 0 0;
+    display: flex; justify-content: center; align-items: flex-end;
     border-radius: 16px 16px 0 0; flex-shrink: 0;
-    background: var(--bg2);
+    background: var(--surface);
+  }
+  .drama-detail-hero::after {
+    content: '';
+    position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 140px; height: 12px; border-radius: 50%;
+    background: rgba(0,0,0,0.15);
+    filter: blur(6px);
   }
   .drama-detail-hero-img {
     width: 160px; height: 220px;
@@ -1187,6 +1194,7 @@
     box-shadow: 0 8px 28px var(--shadow2);
     transition: opacity 0.1s;
     display: block;
+    margin-bottom: 16px;
   }
   .drama-detail-hero-placeholder {
     width: 160px; height: 220px;
@@ -2115,7 +2123,10 @@ function CollForm({ item, onClose, onSave }) {
                 key: v, type: 'button',
                 className: 'status-tab' + (form.status === v ? ' active' : ''),
                 onClick: () => setForm(f => ({ ...f, status: v }))
-              }, s.icon + ' ' + s.label)
+              },
+                React.createElement('i', { className: `ph ph-${s.icon}`, style: { marginRight: '4px', verticalAlign: 'middle' } }),
+                s.label
+              )
             )
           )
         ),
@@ -2463,7 +2474,10 @@ function DramaForm({ item, onClose, onSave, db }) {
                 key: v, type: 'button',
                 className: 'status-tab' + (form.status === v ? ' active' : ''),
                 onClick: () => setForm(f => ({ ...f, status: v }))
-              }, s.icon + ' ' + s.label)
+              },
+                React.createElement('i', { className: `ph ph-${s.icon}`, style: { marginRight: '4px', verticalAlign: 'middle' } }),
+                s.label
+              )
             )
           )
         ),
