@@ -1513,6 +1513,24 @@
     margin: 14px 0 8px; display: flex; align-items: center; gap: 8px;
   }
   .borrow-section-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* ── Font size ── */
+  html[data-fontsize="xs"]  { font-size: 12px; }
+  html[data-fontsize="sm"]  { font-size: 14px; }
+  html[data-fontsize="md"]  { font-size: 16px; }
+  html[data-fontsize="lg"]  { font-size: 18px; }
+  html[data-fontsize="xl"]  { font-size: 20px; }
+  .fontsize-grid { display: flex; gap: 6px; }
+  .fontsize-btn {
+    flex: 1; padding: 8px 4px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg2);
+    color: var(--text2); cursor: pointer; font-family: 'CreamFont', serif;
+    text-align: center; transition: border-color var(--trans), background var(--trans), color var(--trans);
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  .fontsize-btn:hover { border-color: var(--accent); color: var(--text); }
+  .fontsize-btn.active { border-color: var(--accent); background: var(--bg3); color: var(--accent); font-weight: 500; }
+  .fontsize-preview { line-height: 1; }
   /* ── Responsive ── */
   @media (max-width: 600px) {
     .form-group.full { grid-column: 1; }
@@ -4859,6 +4877,7 @@ function App() {
   const [page, setPage] = useState('shelf');
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [fontSize, setFontSize] = useState(() => localStorage.getItem('fontSize') || 'sm');
   const [showNavMenu, setShowNavMenu] = useState(false);
   const [shelfView, setShelfView] = useState('books'); // 'books' | 'authors'
   const [collShowForm, setCollShowForm] = useState(false);
@@ -4872,6 +4891,11 @@ function App() {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-fontsize', fontSize);
+    localStorage.setItem('fontSize', fontSize);
+  }, [fontSize]);
 
   useEffect(() => {
     if (!showThemePicker) return;
