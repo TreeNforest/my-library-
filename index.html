@@ -1531,6 +1531,40 @@
   .fontsize-btn:hover { border-color: var(--accent); color: var(--text); }
   .fontsize-btn.active { border-color: var(--accent); background: var(--bg3); color: var(--accent); font-weight: 500; }
   .fontsize-preview { line-height: 1; }
+
+  /* ── Series (套書) ── */
+  .series-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden; cursor: pointer;
+    transition: transform var(--trans), box-shadow var(--trans), border-color var(--trans);
+    animation: cardIn 0.35s ease both;
+  }
+  .series-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px var(--shadow2); border-color: var(--accent); }
+  .series-cover-row {
+    display: flex; height: 90px; overflow: hidden; gap: 2px;
+    background: var(--bg3);
+  }
+  .series-cover-slot {
+    flex: 1; overflow: hidden; background: var(--bg3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; color: var(--text3);
+  }
+  .series-cover-slot img { width: 100%; height: 100%; object-fit: cover; }
+  .series-info { padding: 10px 12px; }
+  .series-name { font-size: 0.95rem; font-weight: 500; margin-bottom: 3px; }
+  .series-meta { font-size: 0.75rem; color: var(--text3); }
+  .series-progress { height: 3px; background: var(--bg3); margin-top: 6px; border-radius: 2px; overflow: hidden; }
+  .series-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+
+  /* author view toggle btn */
+  .author-view-btn {
+    padding: 5px 12px; border-radius: 14px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text2); font-size: 0.78rem;
+    font-family: 'CreamFont', serif; cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+    transition: border-color var(--trans), color var(--trans);
+  }
+  .author-view-btn:hover { border-color: var(--accent); color: var(--text); }
   /* ── Responsive ── */
   @media (max-width: 600px) {
     .form-group.full { grid-column: 1; }
@@ -3449,6 +3483,204 @@ function BorrowPage({ db, showToast, externalShowForm, onExternalFormClose }) {
   );
 }
 
+/* ── SeriesPage ── */
+function SeriesPage({ books, db, showToast, externalShowForm, onExternalFormClose }) {
+  const [series, setSeries]       = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [showForm, setShowForm]   = useState(false);
+  const [editItem, setEditItem]   = useState(null);
+  const [detailItem, setDetailItem] = useState(null);
+
+  useEffect(() => { if (externalShowForm) { setShowForm(true); onExternalFormClose(); } }, [externalShowForm]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'series'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, snap => {
+      setSeries(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, () => setLoading(false));
+    return unsub;
+  }, []);
+
+  const handleSave = async (item, data, del) => {
+    if (del) { await deleteDoc(doc(db, 'series', item.id)); showToast('已刪除'); return; }
+    if (item) { await updateDoc(doc(db, 'series', item.id), data); showToast('已更新'); }
+    else { await addDoc(collection(db, 'series'), data); showToast('已新增套書系列'); }
+  };
+
+  // Get books belonging to a series
+  const getSeriesBooks = s => {
+    if (!s.bookIds?.length) return [];
+    return s.bookIds.map(id => books.find(b => b.id === id)).filter(Boolean);
+  };
+
+  const SeriesForm = ({ item, onClose }) => {
+    const [form, setForm] = useState({
+      name:  item?.name  || '',
+      notes: item?.notes || '',
+      bookIds: item?.bookIds || [],
+    });
+    const [saving, setSaving] = useState(false);
+    const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+    const toggleBook = id => setForm(f => ({
+      ...f,
+      bookIds: f.bookIds.includes(id) ? f.bookIds.filter(x => x !== id) : [...f.bookIds, id]
+    }));
+
+    const submit = async () => {
+      if (!form.name.trim()) return;
+      setSaving(true);
+      try {
+        const data = { ...form, updatedAt: serverTimestamp() };
+        if (!item) data.createdAt = serverTimestamp();
+        await handleSave(item, data, false);
+        setSaving(false); onClose();
+      } catch(e) { console.error(e); setSaving(false); }
+    };
+
+    return React.createElement('div', { className: 'modal-overlay', onClick: e => e.target === e.currentTarget && onClose() },
+      React.createElement('div', { className: 'modal' },
+        React.createElement('div', { className: 'modal-header' },
+          React.createElement('span', { className: 'modal-title' }, item ? '編輯套書' : '新增套書系列'),
+          React.createElement('button', { className: 'modal-close', onClick: onClose }, '✕')
+        ),
+        React.createElement('div', { className: 'form-grid' },
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '系列名稱'),
+            React.createElement('input', { className: 'form-input', value: form.name, onChange: set('name'), placeholder: '例：波西傑克森系列' })
+          ),
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, '備註'),
+            React.createElement('textarea', { className: 'form-textarea', value: form.notes, onChange: set('notes'), placeholder: '適讀順序、出版資訊…', style: { minHeight: '60px' } })
+          ),
+          React.createElement('div', { className: 'form-group' },
+            React.createElement('label', null, `選擇書籍（已選 ${form.bookIds.length} 本）`),
+            React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto' } },
+              books.map(b =>
+                React.createElement('div', {
+                  key: b.id,
+                  onClick: () => toggleBook(b.id),
+                  style: {
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    padding: '8px 10px', borderRadius: 'var(--radius-sm)',
+                    border: `1px solid ${form.bookIds.includes(b.id) ? 'var(--accent)' : 'var(--border)'}`,
+                    background: form.bookIds.includes(b.id) ? 'var(--bg3)' : 'var(--bg2)',
+                    cursor: 'pointer',
+                  }
+                },
+                  b.coverUrl
+                    ? React.createElement('img', { src: b.coverUrl, alt: '', style: { width: '28px', height: '40px', objectFit: 'cover', borderRadius: '3px', flexShrink: 0 } })
+                    : React.createElement('div', { style: { width: '28px', height: '40px', background: 'var(--bg3)', borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '1rem' } }, '📖'),
+                  React.createElement('div', { style: { flex: 1, minWidth: 0 } },
+                    React.createElement('div', { style: { fontSize: '0.85rem', fontWeight: 500 } }, b.title),
+                    b.author && React.createElement('div', { style: { fontSize: '0.72rem', color: 'var(--text3)' } }, b.author)
+                  ),
+                  form.bookIds.includes(b.id) && React.createElement('i', { className: 'ph ph-check-circle', style: { color: 'var(--accent)', flexShrink: 0 } })
+                )
+              )
+            )
+          )
+        ),
+        React.createElement('div', { className: 'form-actions' },
+          item && React.createElement('button', {
+            className: 'btn-danger', style: { marginRight: 'auto' },
+            onClick: async () => { if (confirm('確定刪除？')) { await handleSave(item, null, true); onClose(); } }
+          }, '刪除'),
+          React.createElement('button', { className: 'btn-secondary', onClick: onClose }, '取消'),
+          React.createElement('button', { className: 'btn-primary', onClick: submit, disabled: saving }, saving ? '儲存中…' : '儲存')
+        )
+      )
+    );
+  };
+
+  const SeriesDetail = ({ s, onClose }) => {
+    const sBooks = getSeriesBooks(s);
+    const done   = sBooks.filter(b => b.status === 'done').length;
+    const pct    = sBooks.length ? Math.round(done / sBooks.length * 100) : 0;
+    return React.createElement('div', { className: 'modal-overlay', onClick: e => e.target === e.currentTarget && onClose() },
+      React.createElement('div', { className: 'modal' },
+        React.createElement('div', { className: 'modal-header' },
+          React.createElement('span', { className: 'modal-title' }, s.name),
+          React.createElement('button', { className: 'modal-close', onClick: onClose }, '✕')
+        ),
+        React.createElement('div', { style: { marginBottom: '14px' } },
+          React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text3)', marginBottom: '6px' } },
+            React.createElement('span', null, `共 ${sBooks.length} 本・已讀完 ${done} 本`),
+            React.createElement('span', null, pct + '%')
+          ),
+          React.createElement('div', { className: 'series-progress' },
+            React.createElement('div', { className: 'series-progress-fill', style: { width: pct + '%' } })
+          )
+        ),
+        s.notes && React.createElement('div', { style: { fontSize: '0.82rem', color: 'var(--text2)', marginBottom: '14px', padding: '10px', background: 'var(--bg2)', borderRadius: 'var(--radius-sm)' } }, s.notes),
+        React.createElement('div', { className: 'books-list' },
+          sBooks.map((b, i) =>
+            React.createElement('div', { key: b.id, className: 'book-list-item' },
+              React.createElement('div', { className: 'book-list-thumb' },
+                b.coverUrl ? React.createElement('img', { src: b.coverUrl, alt: '' }) : '📖'
+              ),
+              React.createElement('div', { className: 'book-list-meta' },
+                React.createElement('div', { style: { fontSize: '0.7rem', color: 'var(--text3)', marginBottom: '2px' } }, `第 ${i+1} 冊`),
+                React.createElement('div', { className: 'book-list-title' }, b.title),
+                React.createElement('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', marginTop: '4px' } },
+                  React.createElement(StatusBadge, { status: b.status }),
+                  React.createElement(Stars, { rating: b.rating })
+                )
+              )
+            )
+          )
+        ),
+        React.createElement('div', { className: 'form-actions' },
+          React.createElement('button', { className: 'btn-secondary', onClick: onClose }, '關閉'),
+          React.createElement('button', { className: 'btn-primary', onClick: () => { onClose(); setEditItem(s); setShowForm(true); } }, '編輯')
+        )
+      )
+    );
+  };
+
+  return React.createElement(React.Fragment, null,
+    loading
+      ? React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }), '載入中…')
+      : series.length === 0
+        ? React.createElement('div', { className: 'empty-state' },
+            React.createElement('div', { className: 'empty-icon' }, '📚'),
+            React.createElement('div', { className: 'empty-title' }, '還沒有套書系列'),
+            React.createElement('div', { className: 'empty-desc' }, '點右下角 ＋ 建立第一個系列')
+          )
+        : React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' } },
+            series.map(s => {
+              const sBooks = getSeriesBooks(s);
+              const done   = sBooks.filter(b => b.status === 'done').length;
+              const pct    = sBooks.length ? Math.round(done / sBooks.length * 100) : 0;
+              return React.createElement('div', { key: s.id, className: 'series-card', onClick: () => setDetailItem(s) },
+                React.createElement('div', { className: 'series-cover-row' },
+                  sBooks.slice(0, 3).map((b, i) =>
+                    React.createElement('div', { key: i, className: 'series-cover-slot' },
+                      b.coverUrl ? React.createElement('img', { src: b.coverUrl, alt: '' }) : '📖'
+                    )
+                  ),
+                  sBooks.length === 0 && React.createElement('div', { className: 'series-cover-slot' }, '📚')
+                ),
+                React.createElement('div', { className: 'series-info' },
+                  React.createElement('div', { className: 'series-name' }, s.name),
+                  React.createElement('div', { className: 'series-meta' }, `${sBooks.length} 本・${done} 讀完`),
+                  React.createElement('div', { className: 'series-progress' },
+                    React.createElement('div', { className: 'series-progress-fill', style: { width: pct + '%' } })
+                  )
+                )
+              );
+            })
+          ),
+    showForm && React.createElement(SeriesForm, {
+      item: editItem, onClose: () => { setShowForm(false); setEditItem(null); }
+    }),
+    detailItem && React.createElement(SeriesDetail, {
+      s: detailItem, onClose: () => setDetailItem(null)
+    })
+  );
+}
+
 /* ── WishlistPage ── */
 function WishlistPage({ db, showToast, books, externalShowForm, onExternalFormClose }) {
   const [wishItems, setWishItems]   = useState([]);
@@ -4879,10 +5111,12 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [fontSize, setFontSize] = useState(() => localStorage.getItem('fontSize') || 'sm');
   const [showNavMenu, setShowNavMenu] = useState(false);
-  const [shelfView, setShelfView] = useState('books'); // 'books' | 'authors'
+  const [shelfView, setShelfView] = useState('books'); // 'books' | 'series' | 'wishlist'
+  const [showAuthorView, setShowAuthorView] = useState(false);
   const [collShowForm, setCollShowForm] = useState(false);
   const [eventsShowForm, setEventsShowForm] = useState(false);
   const [wishlistShowForm, setWishlistShowForm] = useState(false);
+  const [seriesShowForm, setSeriesShowForm] = useState(false);
   const [borrowShowForm, setBorrowShowForm] = useState(false); // 'shelf' | 'progress'
   const [toastEl, showToast] = useToast();
 
@@ -5083,19 +5317,28 @@ function App() {
       ),
 
       /* shelf toggle */
-      React.createElement('div', { className: 'shelf-toggle' },
-        React.createElement('button', {
-          className: 'shelf-toggle-btn' + (shelfView === 'books' ? ' active' : ''),
-          onClick: () => setShelfView('books')
-        }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-books', style: { marginRight: '4px' } }), '書籍')),
-        React.createElement('button', {
-          className: 'shelf-toggle-btn' + (shelfView === 'authors' ? ' active' : ''),
-          onClick: () => setShelfView('authors')
-        }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-user', style: { marginRight: '4px' } }), '作者')),
-        React.createElement('button', {
-          className: 'shelf-toggle-btn' + (shelfView === 'wishlist' ? ' active' : ''),
-          onClick: () => setShelfView('wishlist')
-        }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-shopping-cart', style: { marginRight: '4px' } }), '願望清單'))
+      React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' } },
+        React.createElement('div', { className: 'shelf-toggle', style: { marginBottom: 0 } },
+          React.createElement('button', {
+            className: 'shelf-toggle-btn' + (shelfView === 'books' ? ' active' : ''),
+            onClick: () => setShelfView('books')
+          }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-books', style: { marginRight: '4px' } }), '書籍')),
+          React.createElement('button', {
+            className: 'shelf-toggle-btn' + (shelfView === 'series' ? ' active' : ''),
+            onClick: () => setShelfView('series')
+          }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-stack', style: { marginRight: '4px' } }), '套書')),
+          React.createElement('button', {
+            className: 'shelf-toggle-btn' + (shelfView === 'wishlist' ? ' active' : ''),
+            onClick: () => setShelfView('wishlist')
+          }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-shopping-cart', style: { marginRight: '4px' } }), '願望清單'))
+        ),
+        shelfView === 'books' && React.createElement('button', {
+          className: 'author-view-btn',
+          onClick: () => setShowAuthorView(v => !v)
+        },
+          React.createElement('i', { className: 'ph ph-user' }),
+          showAuthorView ? '書籍列表' : '作者列表'
+        )
       ),
 
       /* status tabs */
@@ -5142,13 +5385,15 @@ function App() {
             React.createElement('div', { className: 'spinner' }),
             '載入中…'
           )
+        : shelfView === 'series'
+          ? React.createElement(SeriesPage, { books, db, showToast, externalShowForm: seriesShowForm, onExternalFormClose: () => setSeriesShowForm(false) })
         : shelfView === 'wishlist'
           ? React.createElement(WishlistPage, {
               db, showToast, books,
               externalShowForm: wishlistShowForm,
               onExternalFormClose: () => setWishlistShowForm(false)
             })
-        : shelfView === 'authors'
+        : showAuthorView
           ? authorList.length === 0
             ? React.createElement('div', { className: 'empty-state' },
                 React.createElement('div', { className: 'empty-icon' }, '✍️'),
@@ -5267,6 +5512,7 @@ function App() {
       className: 'fab',
       onClick: () => {
         if (page === 'shelf' && shelfView === 'wishlist') { setWishlistShowForm(true); }
+        else if (page === 'shelf' && shelfView === 'series') { setSeriesShowForm(true); }
         else if (page === 'shelf') { setEditBook(null); setShowForm(true); }
         else if (page === 'collection') { setCollShowForm(true); }
         else if (page === 'borrow') { setBorrowShowForm(true); }
