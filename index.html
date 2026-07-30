@@ -1565,6 +1565,26 @@
     transition: border-color var(--trans), color var(--trans);
   }
   .author-view-btn:hover { border-color: var(--accent); color: var(--text); }
+
+  /* ── Autocomplete ── */
+  .autocomplete-wrap { position: relative; }
+  .autocomplete-list {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); overflow: hidden;
+    box-shadow: 0 4px 16px var(--shadow2);
+    max-height: 160px; overflow-y: auto;
+    animation: modalIn 0.15s ease;
+  }
+  .autocomplete-item {
+    padding: 9px 12px; font-size: 0.85rem; color: var(--text);
+    cursor: pointer; font-family: 'CreamFont', serif;
+    transition: background var(--trans);
+  }
+  .autocomplete-item:hover { background: var(--bg3); }
+  .autocomplete-item mark {
+    background: none; color: var(--accent); font-weight: 500;
+  }
   /* ── Responsive ── */
   @media (max-width: 600px) {
     .form-group.full { grid-column: 1; }
@@ -1719,7 +1739,50 @@ function StarInput({ value, onChange }) {
 }
 
 /* ── BookForm modal ── */
-function BookForm({ book, onClose, onSave }) {
+/* ── AutocompleteInput ── */
+function AutocompleteInput({ value, onChange, suggestions, placeholder, className }) {
+  const [show, setShow] = useState(false);
+  const ref = React.useRef(null);
+
+  const filtered = value.trim()
+    ? [...new Set(suggestions.filter(s => s && s.toLowerCase().includes(value.toLowerCase()) && s !== value))].slice(0, 8)
+    : [];
+
+  useEffect(() => {
+    const close = e => { if (ref.current && !ref.current.contains(e.target)) setShow(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
+  const highlight = text => {
+    const idx = text.toLowerCase().indexOf(value.toLowerCase());
+    if (idx === -1) return text;
+    return React.createElement(React.Fragment, null,
+      text.slice(0, idx),
+      React.createElement('mark', null, text.slice(idx, idx + value.length)),
+      text.slice(idx + value.length)
+    );
+  };
+
+  return React.createElement('div', { className: 'autocomplete-wrap', ref },
+    React.createElement('input', {
+      className: className || 'form-input',
+      value, placeholder,
+      onChange: e => { onChange(e.target.value); setShow(true); },
+      onFocus: () => setShow(true),
+    }),
+    show && filtered.length > 0 && React.createElement('div', { className: 'autocomplete-list' },
+      filtered.map(s =>
+        React.createElement('div', {
+          key: s, className: 'autocomplete-item',
+          onMouseDown: e => { e.preventDefault(); onChange(s); setShow(false); }
+        }, highlight(s))
+      )
+    )
+  );
+}
+
+function BookForm({ book, books = [], onClose, onSave }) {
   const [form, setForm] = useState({
     title:    book?.title    || '',
     author:   book?.author   || '',
@@ -1741,6 +1804,13 @@ function BookForm({ book, onClose, onSave }) {
   const [preview, setPreview] = useState(book?.coverUrl || '');
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  // Autocomplete suggestions from existing books
+  const unique = key => [...new Set(books.map(b => b[key]).filter(Boolean))];
+  const authorSuggestions   = unique('author');
+  const categorySuggestions = unique('category');
+  const publisherSuggestions = unique('publisher');
+  const languageSuggestions = unique('language');
 
   const handleCover = async e => {
     const file = e.target.files[0];
@@ -1804,13 +1874,13 @@ function BookForm({ book, onClose, onSave }) {
         /* author */
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '作者'),
-          React.createElement('input', { className: 'form-input', value: form.author, onChange: set('author'), placeholder: '作者' })
+          React.createElement(AutocompleteInput, { value: form.author, onChange: v => setForm(f => ({ ...f, author: v })), suggestions: authorSuggestions, placeholder: '作者' })
         ),
 
         /* category */
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '分類'),
-          React.createElement('input', { className: 'form-input', value: form.category, onChange: set('category'), placeholder: '小說、散文、歷史…' })
+          React.createElement(AutocompleteInput, { value: form.category, onChange: v => setForm(f => ({ ...f, category: v })), suggestions: categorySuggestions, placeholder: '小說、散文、歷史…' })
         ),
         /* tags */
         React.createElement('div', { className: 'form-group' },
@@ -1820,12 +1890,12 @@ function BookForm({ book, onClose, onSave }) {
         /* publisher */
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '出版社'),
-          React.createElement('input', { className: 'form-input', value: form.publisher, onChange: set('publisher'), placeholder: '出版社名稱' })
+          React.createElement(AutocompleteInput, { value: form.publisher, onChange: v => setForm(f => ({ ...f, publisher: v })), suggestions: publisherSuggestions, placeholder: '出版社名稱' })
         ),
         /* language */
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '語言'),
-          React.createElement('input', { className: 'form-input', value: form.language, onChange: set('language'), placeholder: '繁中、日文、英文…' })
+          React.createElement(AutocompleteInput, { value: form.language, onChange: v => setForm(f => ({ ...f, language: v })), suggestions: languageSuggestions, placeholder: '繁中、日文、英文…' })
         ),
         /* description */
         React.createElement('div', { className: 'form-group' },
@@ -1915,12 +1985,17 @@ function BookDetail({ book, onClose, onEdit, onAuthor }) {
   const [lightbox, setLightbox] = useState(false);
   return React.createElement('div', { className: 'modal-overlay', onClick: e => e.target === e.currentTarget && onClose() },
     React.createElement('div', { className: 'modal' },
+      lightbox && book.coverUrl && React.createElement(Lightbox, { src: book.coverUrl, onClose: () => setLightbox(false) }),
       React.createElement('div', { className: 'modal-header' },
         React.createElement('span', { className: 'modal-title' }, '書籍詳情'),
         React.createElement('button', { className: 'modal-close', onClick: onClose }, '✕')
       ),
       React.createElement('div', { className: 'detail-top' },
-        React.createElement('div', { className: 'detail-cover' },
+        React.createElement('div', {
+          className: 'detail-cover img-zoomable',
+          onClick: () => book.coverUrl && setLightbox(true),
+          style: { cursor: book.coverUrl ? 'zoom-in' : 'default' }
+        },
           book.coverUrl
             ? React.createElement('img', { src: book.coverUrl, alt: '' })
             : '📖'
@@ -2075,6 +2150,13 @@ function CollForm({ item, onClose, onSave }) {
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(item?.coverUrl || '');
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  // Autocomplete suggestions from existing books
+  const unique = key => [...new Set(books.map(b => b[key]).filter(Boolean))];
+  const authorSuggestions   = unique('author');
+  const categorySuggestions = unique('category');
+  const publisherSuggestions = unique('publisher');
+  const languageSuggestions = unique('language');
 
   const handleCover = async e => {
     const file = e.target.files[0]; if (!file) return;
@@ -2448,6 +2530,13 @@ function DramaForm({ item, onClose, onSave, db }) {
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(item?.coverUrl || '');
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  // Autocomplete suggestions from existing books
+  const unique = key => [...new Set(books.map(b => b[key]).filter(Boolean))];
+  const authorSuggestions   = unique('author');
+  const categorySuggestions = unique('category');
+  const publisherSuggestions = unique('publisher');
+  const languageSuggestions = unique('language');
 
   const handleCover = async e => {
     const file = e.target.files[0]; if (!file) return;
@@ -3823,7 +3912,7 @@ function WishlistPage({ db, showToast, books, externalShowForm, onExternalFormCl
           ),
           React.createElement('div', { className: 'form-group' },
             React.createElement('label', null, '作者'),
-            React.createElement('input', { className: 'form-input', value: form.author, onChange: set('author'), placeholder: '作者' })
+            React.createElement(AutocompleteInput, { value: form.author, onChange: v => setForm(f => ({ ...f, author: v })), suggestions: authorSuggestions, placeholder: '作者' })
           ),
           React.createElement('div', { className: 'form-group' },
             React.createElement('label', null, '分類'),
@@ -4628,6 +4717,13 @@ function EventForm({ item, onClose, onSave }) {
   const [saving, setSaving]   = useState(false);
   const [preview, setPreview] = useState(item?.coverUrl || '');
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  // Autocomplete suggestions from existing books
+  const unique = key => [...new Set(books.map(b => b[key]).filter(Boolean))];
+  const authorSuggestions   = unique('author');
+  const categorySuggestions = unique('category');
+  const publisherSuggestions = unique('publisher');
+  const languageSuggestions = unique('language');
 
   const handleCover = async e => {
     const file = e.target.files[0]; if (!file) return;
@@ -5566,7 +5662,7 @@ function App() {
 
     /* modals */
     showForm && React.createElement(BookForm, {
-      book: editBook, onClose: () => setShowForm(false),
+      book: editBook, books, onClose: () => setShowForm(false),
       onSave: async (data, del) => {
         await handleSave(editBook, data, del);
       }
