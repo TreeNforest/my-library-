@@ -2151,13 +2151,6 @@ function CollForm({ item, onClose, onSave }) {
   const [preview, setPreview] = useState(item?.coverUrl || '');
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
-  // Autocomplete suggestions from existing books
-  const unique = key => [...new Set(books.map(b => b[key]).filter(Boolean))];
-  const authorSuggestions   = unique('author');
-  const categorySuggestions = unique('category');
-  const publisherSuggestions = unique('publisher');
-  const languageSuggestions = unique('language');
-
   const handleCover = async e => {
     const file = e.target.files[0]; if (!file) return;
     const b64 = await compressImage(file);
@@ -2530,13 +2523,6 @@ function DramaForm({ item, onClose, onSave, db }) {
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(item?.coverUrl || '');
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
-
-  // Autocomplete suggestions from existing books
-  const unique = key => [...new Set(books.map(b => b[key]).filter(Boolean))];
-  const authorSuggestions   = unique('author');
-  const categorySuggestions = unique('category');
-  const publisherSuggestions = unique('publisher');
-  const languageSuggestions = unique('language');
 
   const handleCover = async e => {
     const file = e.target.files[0]; if (!file) return;
@@ -4717,13 +4703,6 @@ function EventForm({ item, onClose, onSave }) {
   const [saving, setSaving]   = useState(false);
   const [preview, setPreview] = useState(item?.coverUrl || '');
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
-
-  // Autocomplete suggestions from existing books
-  const unique = key => [...new Set(books.map(b => b[key]).filter(Boolean))];
-  const authorSuggestions   = unique('author');
-  const categorySuggestions = unique('category');
-  const publisherSuggestions = unique('publisher');
-  const languageSuggestions = unique('language');
 
   const handleCover = async e => {
     const file = e.target.files[0]; if (!file) return;
