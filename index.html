@@ -1651,7 +1651,7 @@ const STATUS_MAP = {
 const StatusBadge = ({ status }) => {
   const s = STATUS_MAP[status] || STATUS_MAP['unread'];
   return React.createElement('span', { className: `status-badge ${s.cls}` },
-    React.createElement('i', { className: `ph ph-${s.icon}`, style: { fontSize: '0.85em', marginRight: '3px', verticalAlign: 'middle' } }),
+    React.createElement('i', { className: `ph-duotone ph-${s.icon}`, style: { fontSize: '0.85em', marginRight: '3px', verticalAlign: 'middle' } }),
     s.label
   );
 };
@@ -2257,7 +2257,7 @@ function CollForm({ item, onClose, onSave }) {
                 className: 'status-tab' + (form.status === v ? ' active' : ''),
                 onClick: () => setForm(f => ({ ...f, status: v }))
               },
-                React.createElement('i', { className: `ph ph-${s.icon}`, style: { marginRight: '4px', verticalAlign: 'middle' } }),
+                React.createElement('i', { className: `ph-duotone ph-${s.icon}`, style: { marginRight: '4px', verticalAlign: 'middle' } }),
                 s.label
               )
             )
@@ -2366,7 +2366,7 @@ const DRAMA_STATUS = {
 const DramaStatusBadge = ({ status }) => {
   const s = DRAMA_STATUS[status] || DRAMA_STATUS['unwatched'];
   return React.createElement('span', { className: `status-badge ${s.cls}` },
-    React.createElement('i', { className: `ph ph-${s.icon}`, style: { fontSize: '0.85em', marginRight: '3px', verticalAlign: 'middle' } }),
+    React.createElement('i', { className: `ph-duotone ph-${s.icon}`, style: { fontSize: '0.85em', marginRight: '3px', verticalAlign: 'middle' } }),
     s.label
   );
 };
@@ -2608,7 +2608,7 @@ function DramaForm({ item, onClose, onSave, db }) {
                 className: 'status-tab' + (form.status === v ? ' active' : ''),
                 onClick: () => setForm(f => ({ ...f, status: v }))
               },
-                React.createElement('i', { className: `ph ph-${s.icon}`, style: { marginRight: '4px', verticalAlign: 'middle' } }),
+                React.createElement('i', { className: `ph-duotone ph-${s.icon}`, style: { marginRight: '4px', verticalAlign: 'middle' } }),
                 s.label
               )
             )
@@ -3099,13 +3099,13 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
         }, `演員 (${castList.length})`)
       ),
       React.createElement('div', { className: 'view-toggle' },
-        React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph ph-grid-four' })),
-        React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph ph-list' }))
+        React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
+        React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' }))
       )
     ),
     /* people search */
     React.createElement('div', { className: 'search-wrap', style: { marginBottom: '10px' } },
-      React.createElement('i', { className: 'ph ph-magnifying-glass search-icon' }),
+      React.createElement('i', { className: 'ph-duotone ph-magnifying-glass search-icon' }),
       React.createElement('input', {
         type: 'text', placeholder: '搜尋姓名…',
         value: peopleSearch, onChange: e => setPeopleSearch(e.target.value)
@@ -3164,8 +3164,8 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
             )
           ),
     React.createElement('div', { style: { display: 'flex', gap: '4px', margin: '16px 0', justifyContent: 'flex-end' } },
-      React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph ph-grid-four' })),
-      React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph ph-list' }))
+      React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
+      React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' }))
     )
   );
 
@@ -3187,12 +3187,12 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
     /* search + view toggle */
     React.createElement('div', { className: 'toolbar', style: { marginBottom: '10px' } },
       React.createElement('div', { className: 'search-wrap' },
-        React.createElement('i', { className: 'ph ph-magnifying-glass search-icon' }),
+        React.createElement('i', { className: 'ph-duotone ph-magnifying-glass search-icon' }),
         React.createElement('input', { type: 'text', placeholder: '搜尋劇名、類型或平台…', value: search, onChange: e => setSearch(e.target.value) })
       ),
       React.createElement('div', { className: 'view-toggle' },
-        React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph ph-grid-four' })),
-        React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph ph-list' }))
+        React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
+        React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' }))
       )
     ),
     /* filter bar */
@@ -3498,19 +3498,19 @@ function BorrowPage({ db, showToast, externalShowForm, onExternalFormClose }) {
       ),
       React.createElement('div', { className: 'borrow-meta' },
         (item.borrowFrom || item.borrowType) && React.createElement('span', { className: 'borrow-meta-item' },
-          React.createElement('i', { className: 'ph ph-map-pin' }),
+          React.createElement('i', { className: 'ph-duotone ph-map-pin' }),
           item.borrowFrom || TYPE_LABEL[item.borrowType] || ''
         ),
         item.borrowDate && React.createElement('span', { className: 'borrow-meta-item' },
-          React.createElement('i', { className: 'ph ph-calendar' }),
+          React.createElement('i', { className: 'ph-duotone ph-calendar' }),
           item.borrowDate + ' 借入'
         ),
         item.dueDate && !item.returned && React.createElement('span', { className: 'borrow-meta-item' },
-          React.createElement('i', { className: 'ph ph-clock' }),
+          React.createElement('i', { className: 'ph-duotone ph-clock' }),
           item.dueDate + ' 到期'
         ),
         item.returnedDate && React.createElement('span', { className: 'borrow-meta-item' },
-          React.createElement('i', { className: 'ph ph-check-circle' }),
+          React.createElement('i', { className: 'ph-duotone ph-check-circle' }),
           item.returnedDate + ' 歸還'
         )
       ),
@@ -3533,7 +3533,7 @@ function BorrowPage({ db, showToast, externalShowForm, onExternalFormClose }) {
   return React.createElement(React.Fragment, null,
     /* search */
     React.createElement('div', { className: 'search-wrap', style: { marginBottom: '16px' } },
-      React.createElement('i', { className: 'ph ph-magnifying-glass search-icon' }),
+      React.createElement('i', { className: 'ph-duotone ph-magnifying-glass search-icon' }),
       React.createElement('input', { type: 'text', placeholder: '搜尋書名或圖書館…', value: search, onChange: e => setSearch(e.target.value) })
     ),
     /* undo toast */
@@ -3673,7 +3673,7 @@ function SeriesPage({ books, db, showToast, externalShowForm, onExternalFormClos
         transition: 'opacity 0.15s',
       }
     },
-      selected && React.createElement('i', { className: 'ph ph-dots-six-vertical', style: { color: 'var(--text3)', flexShrink: 0, touchAction: 'none' } }),
+      selected && React.createElement('i', { className: 'ph-duotone ph-dots-six-vertical', style: { color: 'var(--text3)', flexShrink: 0, touchAction: 'none' } }),
       React.createElement('div', { style: { fontSize: '0.72rem', color: 'var(--accent)', minWidth: '24px', textAlign: 'center', flexShrink: 0 } },
         selected ? `${idx+1}` : ''
       ),
@@ -3684,7 +3684,7 @@ function SeriesPage({ books, db, showToast, externalShowForm, onExternalFormClos
         React.createElement('div', { style: { fontSize: '0.85rem', fontWeight: 500 } }, b.title),
         b.author && React.createElement('div', { style: { fontSize: '0.72rem', color: 'var(--text3)' } }, b.author)
       ),
-      React.createElement('i', { className: `ph ph-${selected ? 'x-circle' : 'plus-circle'}`, style: { color: selected ? 'var(--danger)' : 'var(--accent)', flexShrink: 0, fontSize: '1.1rem' } })
+      React.createElement('i', { className: `ph-duotone ph-${selected ? 'x-circle' : 'plus-circle'}`, style: { color: selected ? 'var(--danger)' : 'var(--accent)', flexShrink: 0, fontSize: '1.1rem' } })
     );
 
     return React.createElement('div', { className: 'modal-overlay', onClick: e => e.target === e.currentTarget && onClose() },
@@ -3713,7 +3713,7 @@ function SeriesPage({ books, db, showToast, externalShowForm, onExternalFormClos
           React.createElement('div', { className: 'form-group' },
             React.createElement('label', null, '新增書籍'),
             React.createElement('div', { className: 'search-wrap', style: { marginBottom: '8px' } },
-              React.createElement('i', { className: 'ph ph-magnifying-glass search-icon' }),
+              React.createElement('i', { className: 'ph-duotone ph-magnifying-glass search-icon' }),
               React.createElement('input', { type: 'text', placeholder: '搜尋書名或作者…', value: bookSearch, onChange: e => setBookSearch(e.target.value) })
             ),
             React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' } },
@@ -4956,7 +4956,7 @@ function EventsPage({ db, showToast, externalShowForm, onExternalFormClose }) {
   return React.createElement(React.Fragment, null,
     React.createElement('div', { className: 'toolbar' },
       React.createElement('div', { className: 'search-wrap' },
-        React.createElement('i', { className: 'ph ph-magnifying-glass search-icon' }),
+        React.createElement('i', { className: 'ph-duotone ph-magnifying-glass search-icon' }),
         React.createElement('input', { type: 'text', placeholder: '搜尋名稱、藝人或地點…', value: search, onChange: e => setSearch(e.target.value) })
       )
     ),
@@ -5006,14 +5006,14 @@ function ProgressPage({ books, dramas, db, showToast }) {
         className: 'shelf-toggle-btn' + (tab === 'books' ? ' active' : ''),
         onClick: () => setTab('books')
       },
-        React.createElement('i', { className: 'ph ph-book-open', style: { marginRight: '4px' } }),
+        React.createElement('i', { className: 'ph-duotone ph-book-open', style: { marginRight: '4px' } }),
         '讀書進度'
       ),
       React.createElement('button', {
         className: 'shelf-toggle-btn' + (tab === 'dramas' ? ' active' : ''),
         onClick: () => setTab('dramas')
       },
-        React.createElement('i', { className: 'ph ph-video', style: { marginRight: '4px' } }),
+        React.createElement('i', { className: 'ph-duotone ph-video', style: { marginRight: '4px' } }),
         '進度'
       )
     ),
@@ -5400,24 +5400,27 @@ function App() {
               className: 'nav-dropdown-btn',
               onClick: e => { e.stopPropagation(); setShowNavMenu(v => !v); }
             },
-              React.createElement('i', { className: `ph ph-${{ shelf:'books', progress:'chart-bar', collection:'video', events:'ticket', achievements:'medal', borrow:'book-bookmark' }[page] || 'books'}`, style: { fontSize: '1rem', marginRight: '4px' } }),
+              React.createElement('i', { className: `ph-duotone ph-${{ shelf:'books', progress:'chart-bar', collection:'video', events:'ticket', achievements:'medal', borrow:'book-bookmark' }[page] || 'books'}`, style: { fontSize: '1rem', marginRight: '4px' } }),
               { shelf:'書架', progress:'進度', collection:'觀劇', events:'演出紀錄', achievements:'成就', borrow:'借閱' }[page] || '書架',
               React.createElement('span', { className: 'nav-dropdown-arrow' + (showNavMenu ? ' open' : '') }, '▼')
             ),
             showNavMenu && React.createElement('div', { className: 'nav-dropdown-menu' },
               [
-                { id: 'shelf',      label: '📚 書架' },
-                { id: 'progress',   label: '📊 進度' },
-                { id: 'collection',      label: '🎬 觀劇' },
-                { id: 'events',         label: '🎫 演出紀錄' },
-                { id: 'achievements',   label: '🎖️ 成就' },
-                { id: 'borrow',         label: '借閱', icon: 'book-bookmark' },
+                { id: 'shelf',        label: '書架',    icon: 'books' },
+                { id: 'progress',     label: '進度',    icon: 'chart-bar' },
+                { id: 'collection',   label: '觀劇',    icon: 'video' },
+                { id: 'events',       label: '演出紀錄', icon: 'ticket' },
+                { id: 'achievements', label: '成就',    icon: 'medal' },
+                { id: 'borrow',       label: '借閱',    icon: 'book-bookmark' },
               ].map(p =>
                 React.createElement('button', {
                   key: p.id,
                   className: 'nav-dropdown-item' + (page === p.id ? ' active' : ''),
                   onClick: () => { setPage(p.id); setShowNavMenu(false); }
-                }, p.label)
+                },
+                  React.createElement('i', { className: `ph-duotone ph-${p.icon}`, style: { fontSize: '1rem', marginRight: '6px' } }),
+                  p.label
+                )
               )
             )
           ),
@@ -5425,7 +5428,7 @@ function App() {
             className: 'btn-icon',
             onClick: () => setShowSettings(true),
             title: '設定'
-          }, React.createElement('i', { className: 'ph ph-gear', style: { fontSize: '1.3rem' } })),
+          }, React.createElement('i', { className: 'ph-duotone ph-gear', style: { fontSize: '1.3rem' } })),
 
         )
       )
@@ -5463,21 +5466,21 @@ function App() {
           React.createElement('button', {
             className: 'shelf-toggle-btn' + (shelfView === 'books' ? ' active' : ''),
             onClick: () => setShelfView('books')
-          }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-books', style: { marginRight: '4px' } }), '書籍')),
+          }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph-duotone ph-books', style: { marginRight: '4px' } }), '書籍')),
           React.createElement('button', {
             className: 'shelf-toggle-btn' + (shelfView === 'series' ? ' active' : ''),
             onClick: () => setShelfView('series')
-          }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-stack', style: { marginRight: '4px' } }), '套書')),
+          }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph-duotone ph-stack', style: { marginRight: '4px' } }), '套書')),
           React.createElement('button', {
             className: 'shelf-toggle-btn' + (shelfView === 'wishlist' ? ' active' : ''),
             onClick: () => setShelfView('wishlist')
-          }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph ph-shopping-cart', style: { marginRight: '4px' } }), '願望清單'))
+          }, React.createElement(React.Fragment, null, React.createElement('i', { className: 'ph-duotone ph-shopping-cart', style: { marginRight: '4px' } }), '願望清單'))
         ),
         shelfView === 'books' && React.createElement('button', {
           className: 'author-view-btn',
           onClick: () => setShowAuthorView(v => !v)
         },
-          React.createElement('i', { className: 'ph ph-user' }),
+          React.createElement('i', { className: 'ph-duotone ph-user' }),
           showAuthorView ? '書籍列表' : '作者列表'
         )
       ),
@@ -5502,7 +5505,7 @@ function App() {
       /* toolbar */
       React.createElement('div', { className: 'toolbar' },
         React.createElement('div', { className: 'search-wrap' },
-          React.createElement('i', { className: 'ph ph-magnifying-glass search-icon' }),
+          React.createElement('i', { className: 'ph-duotone ph-magnifying-glass search-icon' }),
           React.createElement('input', {
             type: 'text', placeholder: '搜尋書名、作者或標籤…',
             value: search, onChange: e => setSearch(e.target.value)
@@ -5515,8 +5518,8 @@ function App() {
           React.createElement('option', { key: c, value: c }, c === 'all' ? '全部分類' : c)
         )),
         React.createElement('div', { className: 'view-toggle' },
-          React.createElement('button', { className: `view-btn${view==='grid' ? ' active' : ''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph ph-grid-four' })),
-          React.createElement('button', { className: `view-btn${view==='list' ? ' active' : ''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph ph-list' }))
+          React.createElement('button', { className: `view-btn${view==='grid' ? ' active' : ''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
+          React.createElement('button', { className: `view-btn${view==='list' ? ' active' : ''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' }))
         )
       ),
 
@@ -5592,7 +5595,7 @@ function App() {
       React.createElement('div', { className: 'settings-panel' },
         React.createElement('div', { className: 'settings-header' },
           React.createElement('span', { className: 'settings-title' },
-            React.createElement('i', { className: 'ph ph-gear', style: { marginRight: '8px', verticalAlign: 'middle' } }),
+            React.createElement('i', { className: 'ph-duotone ph-gear', style: { marginRight: '8px', verticalAlign: 'middle' } }),
             '設定'
           ),
           React.createElement('button', { className: 'modal-close', onClick: () => setShowSettings(false) }, '✕')
