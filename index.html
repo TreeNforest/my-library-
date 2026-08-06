@@ -1508,6 +1508,12 @@
   .borrow-btn.primary { background: var(--accent); color: #fff; border: none; }
   .borrow-btn.primary:hover { opacity: 0.85; }
   .borrow-btn.secondary { background: none; color: var(--text2); border: 1px solid var(--border); }
+  .borrow-btn.renew { background: none; color: var(--accent); border: 1px solid var(--accent); }
+  .borrow-btn.renew:hover { background: var(--bg3); }
+  .renew-badge {
+    font-size: 0.7rem; padding: 2px 7px; border-radius: 8px;
+    background: var(--bg3); color: var(--text2); margin-left: 6px;
+  }
   .borrow-section-sep {
     font-size: 0.75rem; color: var(--text3); letter-spacing: 0.06em;
     margin: 14px 0 8px; display: flex; align-items: center; gap: 8px;
@@ -3338,6 +3344,18 @@ function BorrowPage({ db, showToast, externalShowForm, onExternalFormClose }) {
     else { await addDoc(collection(db, 'borrows'), data); showToast('已新增'); }
   };
 
+  const handleRenew = async item => {
+    const cur = item.dueDate || todayStr;
+    const input = prompt(`續借到什麼時候？（目前到期日 ${cur}）\n請輸入新的到期日，格式 YYYY-MM-DD`, cur);
+    if (!input) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input)) { showToast('日期格式不正確'); return; }
+    await updateDoc(doc(db, 'borrows', item.id), {
+      dueDate: input,
+      renewCount: (item.renewCount || 0) + 1,
+    });
+    showToast(`已續借（第 ${(item.renewCount || 0) + 1} 次）`);
+  };
+
   const handleReturn = async item => {
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
@@ -3472,7 +3490,10 @@ function BorrowPage({ db, showToast, externalShowForm, onExternalFormClose }) {
     const daysLabel = getDaysLabel(item);
     return React.createElement('div', { className: `borrow-card${status === 'returned' ? ' returned' : status === 'overdue' ? ' overdue' : status === 'due-soon' ? ' due-soon' : ''}` },
       React.createElement('div', { className: 'borrow-top' },
-        React.createElement('div', { className: 'borrow-title' }, item.title),
+        React.createElement('div', { className: 'borrow-title' },
+          item.title,
+          item.renewCount > 0 && React.createElement('span', { className: 'renew-badge' }, `續借 ${item.renewCount} 次`)
+        ),
         daysLabel && React.createElement('div', { className: `borrow-badge${status === 'overdue' ? ' overdue' : status === 'due-soon' ? ' due-soon' : status === 'returned' ? ' done' : ''}` }, daysLabel)
       ),
       React.createElement('div', { className: 'borrow-meta' },
@@ -3496,6 +3517,7 @@ function BorrowPage({ db, showToast, externalShowForm, onExternalFormClose }) {
       item.notes && React.createElement('div', { style: { fontSize: '0.78rem', color: 'var(--text3)' } }, item.notes),
       React.createElement('div', { className: 'borrow-actions' },
         React.createElement('button', { className: 'borrow-btn secondary', onClick: () => { setEditItem(item); setShowForm(true); } }, '編輯'),
+        !item.returned && React.createElement('button', { className: 'borrow-btn renew', onClick: () => handleRenew(item) }, '續借'),
         !item.returned && React.createElement('button', { className: 'borrow-btn primary', onClick: () => handleReturn(item) }, '標記已歸還 →')
       )
     );
@@ -5379,7 +5401,7 @@ function App() {
               onClick: e => { e.stopPropagation(); setShowNavMenu(v => !v); }
             },
               React.createElement('i', { className: `ph ph-${{ shelf:'books', progress:'chart-bar', collection:'video', events:'ticket', achievements:'medal', borrow:'book-bookmark' }[page] || 'books'}`, style: { fontSize: '1rem', marginRight: '4px' } }),
-              { shelf:'書架', progress:'進度', collection:'觀劇', events:'演出紀錄', achievements:'成就' }[page] || '書架',
+              { shelf:'書架', progress:'進度', collection:'觀劇', events:'演出紀錄', achievements:'成就', borrow:'借閱' }[page] || '書架',
               React.createElement('span', { className: 'nav-dropdown-arrow' + (showNavMenu ? ' open' : '') }, '▼')
             ),
             showNavMenu && React.createElement('div', { className: 'nav-dropdown-menu' },
@@ -5389,7 +5411,7 @@ function App() {
                 { id: 'collection',      label: '🎬 觀劇' },
                 { id: 'events',         label: '🎫 演出紀錄' },
                 { id: 'achievements',   label: '🎖️ 成就' },
-                { id: 'borrow',         label: '📖 借閱' },
+                { id: 'borrow',         label: '借閱', icon: 'book-bookmark' },
               ].map(p =>
                 React.createElement('button', {
                   key: p.id,
