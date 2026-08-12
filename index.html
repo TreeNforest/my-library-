@@ -2237,50 +2237,6 @@ function CollForm({ item, onClose, onSave }) {
   const [preview, setPreview] = useState(item?.coverUrl || '');
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
-  const handleIsbnLookup = async () => {
-    const clean = isbn.replace(/[^0-9Xx]/g, '');
-    if (!clean) return;
-    setIsbnLoading(true);
-    setIsbnMsg(null);
-    try {
-      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${clean}`);
-      const data = await res.json();
-      if (!data.items || data.items.length === 0) {
-        setIsbnMsg({ type: 'error', text: '找不到這本書，請手動輸入' });
-        setIsbnLoading(false);
-        return;
-      }
-      const info = data.items[0].volumeInfo;
-      setForm(f => ({
-        ...f,
-        title:     info.title || f.title,
-        author:    (info.authors || []).join(', ') || f.author,
-        publisher: info.publisher || f.publisher,
-        language:  info.language === 'zh-TW' || info.language === 'zh' ? '繁中' : info.language === 'en' ? '英文' : info.language === 'ja' ? '日文' : (info.language || f.language),
-        description: info.description ? info.description.slice(0, 300) : f.description,
-      }));
-      // Try to fetch cover image and convert to base64
-      const coverUrl = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail;
-      if (coverUrl) {
-        try {
-          const imgRes = await fetch(coverUrl.replace('http://', 'https://'));
-          const blob = await imgRes.blob();
-          const reader = new FileReader();
-          reader.onload = () => {
-            setPreview(reader.result);
-            setForm(f => ({ ...f, coverUrl: reader.result }));
-          };
-          reader.readAsDataURL(blob);
-        } catch(e) { /* cover fetch failed, skip silently */ }
-      }
-      setIsbnMsg({ type: 'success', text: '已帶入書籍資料，請檢查並補充' });
-    } catch(e) {
-      console.error(e);
-      setIsbnMsg({ type: 'error', text: '查詢失敗，請檢查網路連線' });
-    }
-    setIsbnLoading(false);
-  };
-
   const handleCover = async e => {
     const file = e.target.files[0]; if (!file) return;
     const b64 = await compressImage(file);
@@ -2653,50 +2609,6 @@ function DramaForm({ item, onClose, onSave, db }) {
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(item?.coverUrl || '');
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
-
-  const handleIsbnLookup = async () => {
-    const clean = isbn.replace(/[^0-9Xx]/g, '');
-    if (!clean) return;
-    setIsbnLoading(true);
-    setIsbnMsg(null);
-    try {
-      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${clean}`);
-      const data = await res.json();
-      if (!data.items || data.items.length === 0) {
-        setIsbnMsg({ type: 'error', text: '找不到這本書，請手動輸入' });
-        setIsbnLoading(false);
-        return;
-      }
-      const info = data.items[0].volumeInfo;
-      setForm(f => ({
-        ...f,
-        title:     info.title || f.title,
-        author:    (info.authors || []).join(', ') || f.author,
-        publisher: info.publisher || f.publisher,
-        language:  info.language === 'zh-TW' || info.language === 'zh' ? '繁中' : info.language === 'en' ? '英文' : info.language === 'ja' ? '日文' : (info.language || f.language),
-        description: info.description ? info.description.slice(0, 300) : f.description,
-      }));
-      // Try to fetch cover image and convert to base64
-      const coverUrl = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail;
-      if (coverUrl) {
-        try {
-          const imgRes = await fetch(coverUrl.replace('http://', 'https://'));
-          const blob = await imgRes.blob();
-          const reader = new FileReader();
-          reader.onload = () => {
-            setPreview(reader.result);
-            setForm(f => ({ ...f, coverUrl: reader.result }));
-          };
-          reader.readAsDataURL(blob);
-        } catch(e) { /* cover fetch failed, skip silently */ }
-      }
-      setIsbnMsg({ type: 'success', text: '已帶入書籍資料，請檢查並補充' });
-    } catch(e) {
-      console.error(e);
-      setIsbnMsg({ type: 'error', text: '查詢失敗，請檢查網路連線' });
-    }
-    setIsbnLoading(false);
-  };
 
   const handleCover = async e => {
     const file = e.target.files[0]; if (!file) return;
@@ -4060,51 +3972,7 @@ function WishlistPage({ db, showToast, books, externalShowForm, onExternalFormCl
     const [saving, setSaving] = useState(false);
     const [preview, setPreview] = useState(item?.coverUrl || '');
     const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
-    const handleIsbnLookup = async () => {
-    const clean = isbn.replace(/[^0-9Xx]/g, '');
-    if (!clean) return;
-    setIsbnLoading(true);
-    setIsbnMsg(null);
-    try {
-      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${clean}`);
-      const data = await res.json();
-      if (!data.items || data.items.length === 0) {
-        setIsbnMsg({ type: 'error', text: '找不到這本書，請手動輸入' });
-        setIsbnLoading(false);
-        return;
-      }
-      const info = data.items[0].volumeInfo;
-      setForm(f => ({
-        ...f,
-        title:     info.title || f.title,
-        author:    (info.authors || []).join(', ') || f.author,
-        publisher: info.publisher || f.publisher,
-        language:  info.language === 'zh-TW' || info.language === 'zh' ? '繁中' : info.language === 'en' ? '英文' : info.language === 'ja' ? '日文' : (info.language || f.language),
-        description: info.description ? info.description.slice(0, 300) : f.description,
-      }));
-      // Try to fetch cover image and convert to base64
-      const coverUrl = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail;
-      if (coverUrl) {
-        try {
-          const imgRes = await fetch(coverUrl.replace('http://', 'https://'));
-          const blob = await imgRes.blob();
-          const reader = new FileReader();
-          reader.onload = () => {
-            setPreview(reader.result);
-            setForm(f => ({ ...f, coverUrl: reader.result }));
-          };
-          reader.readAsDataURL(blob);
-        } catch(e) { /* cover fetch failed, skip silently */ }
-      }
-      setIsbnMsg({ type: 'success', text: '已帶入書籍資料，請檢查並補充' });
-    } catch(e) {
-      console.error(e);
-      setIsbnMsg({ type: 'error', text: '查詢失敗，請檢查網路連線' });
-    }
-    setIsbnLoading(false);
-  };
-
-  const handleCover = async e => {
+    const handleCover = async e => {
       const file = e.target.files[0]; if (!file) return;
       const b64 = await compressImage(file);
       setPreview(b64); setForm(f => ({ ...f, coverUrl: b64 }));
@@ -4937,50 +4805,6 @@ function EventForm({ item, onClose, onSave }) {
   const [saving, setSaving]   = useState(false);
   const [preview, setPreview] = useState(item?.coverUrl || '');
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
-
-  const handleIsbnLookup = async () => {
-    const clean = isbn.replace(/[^0-9Xx]/g, '');
-    if (!clean) return;
-    setIsbnLoading(true);
-    setIsbnMsg(null);
-    try {
-      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${clean}`);
-      const data = await res.json();
-      if (!data.items || data.items.length === 0) {
-        setIsbnMsg({ type: 'error', text: '找不到這本書，請手動輸入' });
-        setIsbnLoading(false);
-        return;
-      }
-      const info = data.items[0].volumeInfo;
-      setForm(f => ({
-        ...f,
-        title:     info.title || f.title,
-        author:    (info.authors || []).join(', ') || f.author,
-        publisher: info.publisher || f.publisher,
-        language:  info.language === 'zh-TW' || info.language === 'zh' ? '繁中' : info.language === 'en' ? '英文' : info.language === 'ja' ? '日文' : (info.language || f.language),
-        description: info.description ? info.description.slice(0, 300) : f.description,
-      }));
-      // Try to fetch cover image and convert to base64
-      const coverUrl = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail;
-      if (coverUrl) {
-        try {
-          const imgRes = await fetch(coverUrl.replace('http://', 'https://'));
-          const blob = await imgRes.blob();
-          const reader = new FileReader();
-          reader.onload = () => {
-            setPreview(reader.result);
-            setForm(f => ({ ...f, coverUrl: reader.result }));
-          };
-          reader.readAsDataURL(blob);
-        } catch(e) { /* cover fetch failed, skip silently */ }
-      }
-      setIsbnMsg({ type: 'success', text: '已帶入書籍資料，請檢查並補充' });
-    } catch(e) {
-      console.error(e);
-      setIsbnMsg({ type: 'error', text: '查詢失敗，請檢查網路連線' });
-    }
-    setIsbnLoading(false);
-  };
 
   const handleCover = async e => {
     const file = e.target.files[0]; if (!file) return;
