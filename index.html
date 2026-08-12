@@ -1607,6 +1607,100 @@
   .isbn-status { font-size: 0.78rem; margin-top: 6px; }
   .isbn-status.success { color: var(--accent); }
   .isbn-status.error   { color: var(--danger); }
+
+  /* ── Bookshelf visual ── */
+  .bookshelf-sort-row { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .bookshelf-sort-btn {
+    padding: 5px 14px; border-radius: 14px; font-size: 0.78rem;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text2);
+    font-family: 'CreamFont', serif; cursor: pointer;
+    transition: border-color var(--trans), background var(--trans), color var(--trans);
+  }
+  .bookshelf-sort-btn:hover { border-color: var(--accent); }
+  .bookshelf-sort-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .bookshelf-group { margin-bottom: 28px; }
+  .bookshelf-group-title {
+    font-size: 0.82rem; color: var(--text3); letter-spacing: 0.06em;
+    margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .bookshelf-group-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .bookshelf-row {
+    display: flex; align-items: flex-end; gap: 3px;
+    overflow-x: auto; padding: 8px 4px 18px;
+    scrollbar-width: thin;
+  }
+  .bookshelf-plank {
+    position: relative;
+    background: linear-gradient(180deg, #b08860 0%, #8a6440 100%);
+    height: 14px; border-radius: 0 0 4px 4px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.25), inset 0 2px 3px rgba(255,255,255,0.15);
+    flex-shrink: 0;
+  }
+  .bookshelf-books-wrap {
+    display: flex; align-items: flex-end; gap: 2px;
+    position: relative; padding-bottom: 0;
+  }
+  .book-spine {
+    position: relative;
+    width: 26px; flex-shrink: 0;
+    border-radius: 2px 2px 0 0;
+    cursor: pointer;
+    display: flex; align-items: flex-end; justify-content: center;
+    padding-bottom: 6px;
+    box-shadow: inset -3px 0 6px rgba(0,0,0,0.25), inset 2px 0 3px rgba(255,255,255,0.12);
+    transition: transform 0.15s ease;
+    overflow: hidden;
+  }
+  .book-spine:hover { transform: translateY(-6px); }
+  .book-spine-title {
+    writing-mode: vertical-rl; text-orientation: mixed;
+    font-size: 0.62rem; color: rgba(255,255,255,0.92);
+    letter-spacing: 0.02em; line-height: 1.3;
+    max-height: 92%; overflow: hidden;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    white-space: nowrap;
+  }
+  .book-spine-status-dot {
+    position: absolute; top: 5px; left: 50%; transform: translateX(-50%);
+    width: 5px; height: 5px; border-radius: 50%;
+    box-shadow: 0 0 3px rgba(0,0,0,0.4);
+  }
+  .book-spine-shadow {
+    position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+    width: 90%; height: 8px; border-radius: 50%;
+    background: rgba(0,0,0,0.18); filter: blur(3px);
+  }
+
+  /* Popup card */
+  .book-popup-overlay {
+    position: fixed; inset: 0; z-index: 250;
+    background: rgba(0,0,0,0.35);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; animation: overlayIn 0.15s ease;
+  }
+  .book-popup-card {
+    background: var(--surface); border-radius: var(--radius);
+    padding: 16px; width: 100%; max-width: 300px;
+    display: flex; gap: 12px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+    animation: modalIn 0.2s ease;
+  }
+  .book-popup-cover {
+    width: 70px; height: 100px; flex-shrink: 0; border-radius: 6px; overflow: hidden;
+    background: var(--bg3); display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem; color: var(--text3);
+    box-shadow: 0 4px 12px var(--shadow2);
+  }
+  .book-popup-cover img { width: 100%; height: 100%; object-fit: cover; }
+  .book-popup-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .book-popup-title { font-size: 0.92rem; font-weight: 500; line-height: 1.3; }
+  .book-popup-author { font-size: 0.78rem; color: var(--text3); }
+  .book-popup-btn {
+    margin-top: 6px; padding: 5px 0; border-radius: 12px;
+    background: var(--accent); color: #fff; border: none;
+    font-size: 0.78rem; font-family: 'CreamFont', serif; cursor: pointer;
+    text-align: center;
+  }
   /* ── Responsive ── */
   @media (max-width: 600px) {
     .form-group.full { grid-column: 1; }
@@ -1716,6 +1810,39 @@ const compressImage = (file, maxW=600) => new Promise(res => {
   };
   reader.readAsDataURL(file);
 });
+
+/* ── Extract average color from an image URL (for book spines) ── */
+const colorCache = {};
+function getAvgColor(src) {
+  return new Promise(resolve => {
+    if (!src) { resolve(null); return; }
+    if (colorCache[src]) { resolve(colorCache[src]); return; }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const w = 24, h = 24;
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const data = ctx.getImageData(0, 0, w, h).data;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          r += data[i]; g += data[i+1]; b += data[i+2]; n++;
+        }
+        r = Math.round(r/n); g = Math.round(g/n); b = Math.round(b/n);
+        // Darken slightly for spine depth
+        const dr = Math.round(r*0.75), dg = Math.round(g*0.75), db = Math.round(b*0.75);
+        const result = { light: `rgb(${r},${g},${b})`, dark: `rgb(${dr},${dg},${db})` };
+        colorCache[src] = result;
+        resolve(result);
+      } catch(e) { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
 
 /* ── Toast ── */
 function useToast() {
@@ -5349,6 +5476,136 @@ const THEMES = [
   { id: 'forest',   label: '英倫森林',  color: '#1a3a1e', dark: true  },
 ];
 
+/* ── BookSpine ── */
+function BookSpine({ book, onClick }) {
+  const [colors, setColors] = useState(null);
+  useEffect(() => {
+    let mounted = true;
+    if (book.coverUrl) {
+      getAvgColor(book.coverUrl).then(c => { if (mounted) setColors(c); });
+    }
+    return () => { mounted = false; };
+  }, [book.coverUrl]);
+
+  const fallback = { light: '#a89e8e', dark: '#7a7060' };
+  const c = colors || fallback;
+  // Width varies slightly based on title length for visual variety
+  const width = 24 + Math.min(10, Math.floor((book.title?.length || 5) / 3));
+  const height = 130 + (book.id.charCodeAt(0) % 20);
+
+  const statusColor = {
+    unread:  '#a89e78',
+    reading: '#5a9a6a',
+    done:    '#5a8ac0',
+    dropped: '#c05050',
+  }[book.status] || '#a89e78';
+
+  return React.createElement('div', {
+    className: 'book-spine',
+    style: {
+      width: width + 'px',
+      height: height + 'px',
+      background: `linear-gradient(105deg, ${c.dark} 0%, ${c.light} 45%, ${c.dark} 100%)`,
+    },
+    onClick: () => onClick(book)
+  },
+    React.createElement('div', { className: 'book-spine-status-dot', style: { background: statusColor } }),
+    React.createElement('div', { className: 'book-spine-title' }, book.title),
+    React.createElement('div', { className: 'book-spine-shadow' })
+  );
+}
+
+/* ── BookPopup ── */
+function BookPopup({ book, onClose, onOpenDetail }) {
+  return React.createElement('div', { className: 'book-popup-overlay', onClick: onClose },
+    React.createElement('div', { className: 'book-popup-card', onClick: e => e.stopPropagation() },
+      React.createElement('div', { className: 'book-popup-cover' },
+        book.coverUrl ? React.createElement('img', { src: book.coverUrl, alt: '' }) : '📖'
+      ),
+      React.createElement('div', { className: 'book-popup-info' },
+        React.createElement('div', { className: 'book-popup-title' }, book.title),
+        book.author && React.createElement('div', { className: 'book-popup-author' }, book.author),
+        React.createElement(StatusBadge, { status: book.status }),
+        React.createElement(Stars, { rating: book.rating }),
+        React.createElement('button', { className: 'book-popup-btn', onClick: () => onOpenDetail(book) }, '查看詳情')
+      )
+    )
+  );
+}
+
+/* ── BookshelfView ── */
+function BookshelfView({ books, onOpenDetail }) {
+  const [sortMode, setSortMode] = useState('category'); // 'category' | 'flat' | 'date'
+  const [popupBook, setPopupBook] = useState(null);
+
+  const renderRow = (bks, key) => React.createElement('div', { key, className: 'bookshelf-row' },
+    React.createElement('div', { className: 'bookshelf-books-wrap' },
+      bks.map(b => React.createElement(BookSpine, { key: b.id, book: b, onClick: setPopupBook }))
+    )
+  );
+
+  let content;
+  if (sortMode === 'category') {
+    const groups = {};
+    books.forEach(b => {
+      const cat = b.category || '未分類';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(b);
+    });
+    content = Object.entries(groups).map(([cat, bks]) =>
+      React.createElement('div', { key: cat, className: 'bookshelf-group' },
+        React.createElement('div', { className: 'bookshelf-group-title' }, `${cat} (${bks.length})`),
+        renderRow(bks, cat),
+        React.createElement('div', { className: 'bookshelf-plank' })
+      )
+    );
+  } else if (sortMode === 'date') {
+    const sorted = [...books].sort((a, b) => {
+      const at = a.createdAt?.seconds || 0, bt = b.createdAt?.seconds || 0;
+      return bt - at;
+    });
+    // Split into rows of ~12 books each for visual shelves
+    const rows = [];
+    for (let i = 0; i < sorted.length; i += 12) rows.push(sorted.slice(i, i + 12));
+    content = rows.map((r, i) =>
+      React.createElement('div', { key: i, className: 'bookshelf-group' },
+        renderRow(r, i),
+        React.createElement('div', { className: 'bookshelf-plank' })
+      )
+    );
+  } else {
+    // flat - all together
+    const rows = [];
+    for (let i = 0; i < books.length; i += 12) rows.push(books.slice(i, i + 12));
+    content = rows.map((r, i) =>
+      React.createElement('div', { key: i, className: 'bookshelf-group' },
+        renderRow(r, i),
+        React.createElement('div', { className: 'bookshelf-plank' })
+      )
+    );
+  }
+
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'bookshelf-sort-row' },
+      React.createElement('button', { className: 'bookshelf-sort-btn' + (sortMode==='category'?' active':''), onClick: () => setSortMode('category') }, '依分類'),
+      React.createElement('button', { className: 'bookshelf-sort-btn' + (sortMode==='flat'?' active':''), onClick: () => setSortMode('flat') }, '全部一起'),
+      React.createElement('button', { className: 'bookshelf-sort-btn' + (sortMode==='date'?' active':''), onClick: () => setSortMode('date') }, '依新增日期')
+    ),
+    books.length === 0
+      ? React.createElement('div', { className: 'empty-state' },
+          React.createElement('div', { className: 'empty-icon' }, '📚'),
+          React.createElement('div', { className: 'empty-title' }, '書架是空的'),
+          React.createElement('div', { className: 'empty-desc' }, '新增書籍後會顯示在這裡')
+        )
+      : content,
+    popupBook && React.createElement(BookPopup, {
+      book: popupBook,
+      onClose: () => setPopupBook(null),
+      onOpenDetail: b => { setPopupBook(null); onOpenDetail(b); }
+    })
+  );
+}
+
 function App() {
   const [books,   setBooks]   = useState([]);
   const [loading, setLoading] = useState(true);
@@ -5633,7 +5890,8 @@ function App() {
         )),
         React.createElement('div', { className: 'view-toggle' },
           React.createElement('button', { className: `view-btn${view==='grid' ? ' active' : ''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
-          React.createElement('button', { className: `view-btn${view==='list' ? ' active' : ''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' }))
+          React.createElement('button', { className: `view-btn${view==='list' ? ' active' : ''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' })),
+          React.createElement('button', { className: `view-btn${view==='shelf' ? ' active' : ''}`, onClick: () => setView('shelf') }, React.createElement('i', { className: 'ph-duotone ph-books' }))
         )
       ),
 
@@ -5687,6 +5945,8 @@ function App() {
                     )
                   )
                 )
+          : view === 'shelf'
+            ? React.createElement(BookshelfView, { books: filtered, onOpenDetail: b => setDetailBook(b) })
           : filtered.length === 0
             ? React.createElement('div', { className: 'empty-state' },
                 React.createElement('div', { className: 'empty-icon' }, '📚'),
