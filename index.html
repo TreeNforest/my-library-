@@ -1842,38 +1842,72 @@ function BookForm({ book, books = [], onClose, onSave }) {
     if (!clean) return;
     setIsbnLoading(true);
     setIsbnMsg(null);
+
+    const applyInfo = (title, authors, publisher, language, description, coverUrl) => {
+      setForm(f => ({
+        ...f,
+        title: title || f.title,
+        author: authors || f.author,
+        publisher: publisher || f.publisher,
+        language: language || f.language,
+        description: description ? description.slice(0, 300) : f.description,
+      }));
+      if (coverUrl) {
+        fetch(coverUrl.replace('http://', 'https://'))
+          .then(r => r.blob())
+          .then(blob => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              setPreview(reader.result);
+              setForm(f => ({ ...f, coverUrl: reader.result }));
+            };
+            reader.readAsDataURL(blob);
+          })
+          .catch(() => {});
+      }
+    };
+
+    const langMap = { 'zh-TW': '繁中', zh: '繁中', en: '英文', ja: '日文', ko: '韓文' };
+
     try {
+      // ── Try 1: Google Books ──
       const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${clean}`);
       const data = await res.json();
-      if (!data.items || data.items.length === 0) {
-        setIsbnMsg({ type: 'error', text: '找不到這本書，請手動輸入' });
+      if (data.items && data.items.length > 0) {
+        const info = data.items[0].volumeInfo;
+        applyInfo(
+          info.title,
+          (info.authors || []).join(', '),
+          info.publisher,
+          langMap[info.language] || info.language,
+          info.description,
+          info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail
+        );
+        setIsbnMsg({ type: 'success', text: '已帶入書籍資料（Google Books），請檢查並補充' });
         setIsbnLoading(false);
         return;
       }
-      const info = data.items[0].volumeInfo;
-      setForm(f => ({
-        ...f,
-        title:     info.title || f.title,
-        author:    (info.authors || []).join(', ') || f.author,
-        publisher: info.publisher || f.publisher,
-        language:  info.language === 'zh-TW' || info.language === 'zh' ? '繁中' : info.language === 'en' ? '英文' : info.language === 'ja' ? '日文' : (info.language || f.language),
-        description: info.description ? info.description.slice(0, 300) : f.description,
-      }));
-      // Try to fetch cover image and convert to base64
-      const coverUrl = info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail;
-      if (coverUrl) {
-        try {
-          const imgRes = await fetch(coverUrl.replace('http://', 'https://'));
-          const blob = await imgRes.blob();
-          const reader = new FileReader();
-          reader.onload = () => {
-            setPreview(reader.result);
-            setForm(f => ({ ...f, coverUrl: reader.result }));
-          };
-          reader.readAsDataURL(blob);
-        } catch(e) { /* cover fetch failed, skip silently */ }
+
+      // ── Try 2: Open Library (fallback, sometimes better for non-English ISBNs) ──
+      const olRes = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${clean}&format=json&jscmd=data`);
+      const olData = await olRes.json();
+      const olKey = `ISBN:${clean}`;
+      if (olData[olKey]) {
+        const info = olData[olKey];
+        applyInfo(
+          info.title,
+          (info.authors || []).map(a => a.name).join(', '),
+          (info.publishers || []).map(p => p.name).join(', '),
+          '',
+          info.notes,
+          info.cover?.medium || info.cover?.small
+        );
+        setIsbnMsg({ type: 'success', text: '已帶入書籍資料（Open Library），請檢查並補充' });
+        setIsbnLoading(false);
+        return;
       }
-      setIsbnMsg({ type: 'success', text: '已帶入書籍資料，請檢查並補充' });
+
+      setIsbnMsg({ type: 'error', text: '兩個書目資料庫都找不到這本書（中文書 ISBN 常未收錄），請手動輸入' });
     } catch(e) {
       console.error(e);
       setIsbnMsg({ type: 'error', text: '查詢失敗，請檢查網路連線' });
