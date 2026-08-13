@@ -1645,7 +1645,7 @@
   .book-spine {
     position: relative;
     flex-shrink: 0;
-    border-radius: 2px 2px 0 0;
+    border-radius: 1px 1px 0 0;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     box-shadow: inset -4px 0 8px rgba(0,0,0,0.28), inset 3px 0 4px rgba(255,255,255,0.14);
@@ -1655,13 +1655,15 @@
   .book-spine:hover { transform: translateY(-8px); }
   .book-spine:active { transform: translateY(-4px); }
   .book-spine-title {
-    writing-mode: vertical-rl; text-orientation: upright;
-    font-size: 0.78rem; font-weight: 500;
+    writing-mode: vertical-rl; text-orientation: mixed;
+    font-weight: 500;
     color: rgba(255,255,255,0.96);
-    letter-spacing: 0.05em; line-height: 1.15;
-    max-height: 84%; overflow: hidden;
+    letter-spacing: 0.04em; line-height: 1.1;
+    max-height: 86%;
     text-shadow: 0 1px 3px rgba(0,0,0,0.55);
     text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
   }
   .book-spine-status-dot {
     position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
@@ -1669,36 +1671,66 @@
     box-shadow: 0 0 4px rgba(0,0,0,0.5);
   }
 
-  /* ── 3D Book flip modal ── */
+  /* ── 3D Book pull-out modal ── */
   .book3d-overlay {
     position: fixed; inset: 0; z-index: 300;
-    background: rgba(0,0,0,0.78);
+    background: rgba(0,0,0,0.42);
+    backdrop-filter: blur(2px);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     animation: overlayIn 0.25s ease;
     padding: 20px;
-    perspective: 1400px;
+    perspective: 1600px;
   }
   .book3d-stage {
     position: relative;
-    width: 220px; height: 320px;
+    width: 210px; height: 300px;
     transform-style: preserve-3d;
-    transition: transform 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
-    animation: bookPullOut 0.55s cubic-bezier(0.25, 1.2, 0.5, 1);
+    transition: transform 0.65s cubic-bezier(0.34, 1.1, 0.4, 1);
+    transform: rotateY(-14deg) rotateX(2deg);
+    animation: bookPullOut 0.7s cubic-bezier(0.22, 1.05, 0.4, 1);
   }
   @keyframes bookPullOut {
-    0%   { transform: translateY(120px) scale(0.35) rotateY(-70deg); opacity: 0; }
-    55%  { opacity: 1; }
-    100% { transform: translateY(0) scale(1) rotateY(0deg); opacity: 1; }
+    0%   { transform: translateY(160px) translateZ(-300px) rotateY(-78deg) scale(0.4); opacity: 0; }
+    45%  { opacity: 1; }
+    100% { transform: translateY(0) translateZ(0) rotateY(-14deg) rotateX(2deg) scale(1); opacity: 1; }
   }
-  .book3d-stage.flipped { transform: rotateY(180deg); }
+  .book3d-stage.flipped { transform: rotateY(166deg) rotateX(2deg); }
   .book3d-face {
     position: absolute; inset: 0;
     backface-visibility: hidden;
-    border-radius: 8px; overflow: hidden;
-    box-shadow: 0 16px 48px rgba(0,0,0,0.55);
+    border-radius: 3px 6px 6px 3px;
+    overflow: hidden;
+    box-shadow: 0 22px 50px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.3);
   }
-  .book3d-front { background: var(--bg3); display: flex; align-items: center; justify-content: center; font-size: 3.5rem; color: var(--text3); }
+  .book3d-front {
+    background: var(--bg3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 3.5rem; color: var(--text3);
+  }
   .book3d-front img { width: 100%; height: 100%; object-fit: cover; }
+  /* page edges — the physical thickness on the right side */
+  .book3d-pages {
+    position: absolute; top: 3px; bottom: 3px; right: -14px;
+    width: 14px;
+    background: repeating-linear-gradient(
+      to right,
+      #f2ece0 0px, #f2ece0 1px,
+      #ddd5c6 1px, #ddd5c6 2px
+    );
+    transform: rotateY(90deg);
+    transform-origin: left center;
+    border-radius: 0 2px 2px 0;
+    box-shadow: inset -2px 0 4px rgba(0,0,0,0.15);
+  }
+  /* spine — visible left edge */
+  .book3d-spine-edge {
+    position: absolute; top: 0; bottom: 0; left: -14px;
+    width: 14px;
+    transform: rotateY(-90deg);
+    transform-origin: right center;
+    border-radius: 3px 0 0 3px;
+    box-shadow: inset 3px 0 6px rgba(0,0,0,0.3);
+  }
   .book3d-back {
     transform: rotateY(180deg);
     background: var(--surface);
@@ -1724,14 +1756,15 @@
   .book3d-btn.secondary { background: var(--bg3); color: var(--text2); }
   .book3d-btn:hover { opacity: 0.85; }
   .book3d-hint {
-    margin-top: 20px; color: rgba(255,255,255,0.7); font-size: 0.8rem;
+    margin-top: 26px; color: rgba(255,255,255,0.85); font-size: 0.8rem;
     display: flex; align-items: center; gap: 6px;
-    animation: fadeIn 0.6s ease 0.4s both;
+    animation: fadeIn 0.6s ease 0.5s both;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.5);
   }
   .book3d-close {
     position: fixed; top: 20px; right: 20px;
     width: 38px; height: 38px; border-radius: 50%;
-    background: rgba(255,255,255,0.15); color: #fff;
+    background: rgba(255,255,255,0.2); color: #fff;
     display: flex; align-items: center; justify-content: center;
     border: none; cursor: pointer; font-size: 1.1rem;
     backdrop-filter: blur(4px); z-index: 310;
@@ -1979,6 +2012,8 @@ function BookForm({ book, books = [], onClose, onSave }) {
     status:      book?.status      || 'unread',
     purchasePrice: book?.purchasePrice !== undefined ? String(book.purchasePrice) : '',
     purchaseDate:  book?.purchaseDate  || '',
+    pageCount:     book?.pageCount !== undefined && book?.pageCount !== null ? String(book.pageCount) : '',
+    bookSize:      book?.bookSize      || 'normal',
     publisher:   book?.publisher   || '',
     originalTitle: book?.originalTitle || '',
     language:    book?.language    || '',
@@ -2104,6 +2139,8 @@ function BookForm({ book, books = [], onClose, onSave }) {
         status:      form.status,
         purchasePrice: form.purchasePrice !== '' ? parseFloat(form.purchasePrice) : null,
         purchaseDate:  form.purchaseDate,
+        pageCount:     form.pageCount !== '' ? parseInt(form.pageCount) : null,
+        bookSize:      form.bookSize,
         publisher:   form.publisher,
         originalTitle: form.originalTitle,
         language:    form.language,
@@ -2193,6 +2230,27 @@ function BookForm({ book, books = [], onClose, onSave }) {
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '購買日期'),
           React.createElement('input', { className: 'form-input', type: 'date', value: form.purchaseDate, onChange: set('purchaseDate') })
+        ),
+        React.createElement('div', { className: 'form-group' },
+          React.createElement('label', null, '實體頁數'),
+          React.createElement('input', { className: 'form-input', type: 'number', value: form.pageCount, onChange: set('pageCount'), placeholder: '例：320', min: 0 })
+        ),
+        React.createElement('div', { className: 'form-group' },
+          React.createElement('label', null, '開本大小'),
+          React.createElement('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+            [
+              { v: 'pocket', l: '文庫本' },
+              { v: 'small',  l: '小開本' },
+              { v: 'normal', l: '一般' },
+              { v: 'large',  l: '大開本' },
+            ].map(s =>
+              React.createElement('button', {
+                key: s.v, type: 'button',
+                className: 'status-tab' + (form.bookSize === s.v ? ' active' : ''),
+                onClick: () => setForm(f => ({ ...f, bookSize: s.v }))
+              }, s.l)
+            )
+          )
         ),
         /* format */
         React.createElement('div', { className: 'form-group full' },
@@ -2300,6 +2358,7 @@ function BookDetail({ book, onClose, onEdit, onAuthor }) {
             [
               book.category && { label: '分類', value: book.category },
               book.dateRead && { label: '閱讀日期', value: book.dateRead },
+              book.pageCount     && { label: '頁數',    value: `${book.pageCount} 頁` },
               book.purchasePrice && { label: '購買金額', value: `$${book.purchasePrice}` },
               book.purchaseDate  && { label: '購買日期',  value: book.purchaseDate },
               book.publisher && { label: '出版社', value: book.publisher },
@@ -5525,9 +5584,25 @@ function BookSpine({ book, onClick }) {
 
   const fallback = { light: '#a89e8e', dark: '#7a7060' };
   const c = colors || fallback;
-  // Wider spines for readability; vary slightly by title length
-  const width  = 34 + Math.min(14, Math.floor((book.title?.length || 5) / 2.5));
-  const height = 150 + (book.id.charCodeAt(0) % 24);
+
+  // ── Real physical dimensions ──
+  // Thickness from page count: ~1px per 12 pages, clamped 22–70px
+  const pages = parseInt(book.pageCount) || 0;
+  const width = pages > 0
+    ? Math.max(22, Math.min(70, Math.round(pages / 12) + 18))
+    : 32; // default when no page count
+
+  // Height from book size (開本)
+  const heightMap = { pocket: 120, small: 142, normal: 165, large: 195 };
+  const height = heightMap[book.bookSize] || heightMap.normal;
+
+  // Auto-shrink font when title is long relative to available height
+  const titleLen = (book.title || '').length;
+  const availableChars = Math.floor(height / 14); // rough estimate at base font
+  let fontSize = 0.8;
+  if (titleLen > availableChars) {
+    fontSize = Math.max(0.5, 0.8 * (availableChars / titleLen));
+  }
 
   const statusColor = {
     unread:  '#d4c088',
@@ -5543,17 +5618,30 @@ function BookSpine({ book, onClick }) {
       height: height + 'px',
       background: `linear-gradient(100deg, ${c.dark} 0%, ${c.light} 42%, ${c.light} 62%, ${c.dark} 100%)`,
     },
-    onClick: () => onClick(book)
+    onClick: () => onClick(book),
+    title: book.title
   },
     React.createElement('div', { className: 'book-spine-status-dot', style: { background: statusColor } }),
-    React.createElement('div', { className: 'book-spine-title' }, book.title)
+    React.createElement('div', {
+      className: 'book-spine-title',
+      style: { fontSize: fontSize + 'rem' }
+    }, book.title)
   );
 }
 
 /* ── Book3DModal — pull book off shelf, swipe/tap to flip ── */
 function Book3DModal({ book, onClose, onOpenDetail, onEdit }) {
   const [flipped, setFlipped] = useState(false);
+  const [colors, setColors] = useState(null);
   const touchStart = React.useRef(null);
+
+  useEffect(() => {
+    let mounted = true;
+    if (book.coverUrl) getAvgColor(book.coverUrl).then(c => { if (mounted) setColors(c); });
+    return () => { mounted = false; };
+  }, [book.coverUrl]);
+
+  const c = colors || { light: '#a89e8e', dark: '#7a7060' };
 
   const handleTouchStart = e => { touchStart.current = e.touches[0].clientX; };
   const handleTouchEnd = e => {
@@ -5580,6 +5668,13 @@ function Book3DModal({ book, onClose, onOpenDetail, onEdit }) {
           ? React.createElement('img', { src: book.coverUrl, alt: '' })
           : '📖'
       ),
+      /* physical spine edge (left side, colored like the book) */
+      React.createElement('div', {
+        className: 'book3d-spine-edge',
+        style: { background: `linear-gradient(180deg, ${c.dark}, ${c.light})` }
+      }),
+      /* page edges (right side, paper texture) */
+      React.createElement('div', { className: 'book3d-pages' }),
       /* back — details */
       React.createElement('div', { className: 'book3d-face book3d-back', onClick: e => e.stopPropagation() },
         React.createElement('div', { className: 'book3d-back-title' }, book.title),
