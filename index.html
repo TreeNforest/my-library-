@@ -1688,7 +1688,7 @@
     box-shadow: 0 0 4px rgba(0,0,0,0.5);
   }
 
-  /* ── 3D Book pull-out modal ── */
+  /* ── 3D Book (true box) modal ── */
   .book3d-overlay {
     position: fixed; inset: 0; z-index: 300;
     background: rgba(0,0,0,0.42);
@@ -1696,73 +1696,99 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     animation: overlayIn 0.25s ease;
     padding: 20px;
-    perspective: 1600px;
+    perspective: 1800px;
+    touch-action: none;
   }
   .book3d-stage {
     position: relative;
     width: 210px; height: 300px;
     transform-style: preserve-3d;
-    transition: transform 0.85s cubic-bezier(0.34, 1.05, 0.4, 1);
-    transform: rotateY(0deg);
     animation: bookPullOut 1.05s cubic-bezier(0.22, 1.0, 0.36, 1);
+    cursor: grab;
   }
+  .book3d-stage.dragging { cursor: grabbing; }
+  .book3d-stage.snapping { transition: transform 0.55s cubic-bezier(0.34, 1.05, 0.4, 1); }
   @keyframes bookPullOut {
     0%   { transform: translateY(180px) translateZ(-320px) rotateY(-82deg) scale(0.35); opacity: 0; }
     35%  { opacity: 1; }
-    75%  { transform: translateY(-8px) translateZ(0) rotateY(-8deg) scale(1.02); }
+    75%  { transform: translateY(-8px) translateZ(0) rotateY(-10deg) scale(1.02); }
     100% { transform: translateY(0) translateZ(0) rotateY(0deg) scale(1); opacity: 1; }
   }
-  .book3d-stage.flipped { transform: rotateY(180deg); }
+
+  /* the six faces of the book box */
   .book3d-face {
-    position: absolute; inset: 0;
+    position: absolute;
     backface-visibility: hidden;
-    border-radius: 3px 6px 6px 3px;
-    overflow: hidden;
-    box-shadow: 0 22px 50px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.3);
   }
+  /* front cover */
   .book3d-front {
+    inset: 0;
+    transform: translateZ(calc(var(--book-thick, 16px) / 2));
+    border-radius: 2px 5px 5px 2px;
+    overflow: hidden;
     background: var(--bg3);
     display: flex; align-items: center; justify-content: center;
     font-size: 3.5rem; color: var(--text3);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.12);
   }
   .book3d-front img { width: 100%; height: 100%; object-fit: cover; }
-  /* page edges — the physical thickness on the right side */
-  .book3d-pages {
-    position: absolute; top: 3px; bottom: 3px; right: calc(var(--book-thick, 14px) * -1);
-    width: var(--book-thick, 14px);
-    background: repeating-linear-gradient(
-      to right,
-      #f2ece0 0px, #f2ece0 1px,
-      #ddd5c6 1px, #ddd5c6 2px
-    );
-    transform: rotateY(90deg);
-    transform-origin: left center;
-    border-radius: 0 2px 2px 0;
-    box-shadow: inset -2px 0 4px rgba(0,0,0,0.15);
-  }
-  /* spine — visible left edge */
-  .book3d-spine-edge {
-    position: absolute; top: 0; bottom: 0; left: calc(var(--book-thick, 14px) * -1);
-    width: var(--book-thick, 14px);
-    transform: rotateY(-90deg);
-    transform-origin: right center;
-    border-radius: 3px 0 0 3px;
-    box-shadow: inset 3px 0 6px rgba(0,0,0,0.3);
-  }
+  /* back cover (details panel) */
   .book3d-back {
-    transform: rotateY(180deg);
+    inset: 0;
+    transform: translateZ(calc(var(--book-thick, 16px) / -2)) rotateY(180deg);
+    border-radius: 5px 2px 2px 5px;
     background: var(--surface);
     padding: 20px 18px;
-    display: flex; flex-direction: column; gap: 10px;
+    display: flex; flex-direction: column; gap: 9px;
     overflow-y: auto;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.12);
   }
+  /* left side = spine (blurred cover, like on the shelf) */
+  .book3d-spine {
+    top: 0; bottom: 0; left: 0;
+    width: var(--book-thick, 16px);
+    transform: translateX(calc(var(--book-thick, 16px) / -2)) rotateY(-90deg);
+    background-size: cover; background-position: center;
+    box-shadow: inset 2px 0 6px rgba(0,0,0,0.35), inset -2px 0 5px rgba(0,0,0,0.25);
+  }
+  /* right side = page edges */
+  .book3d-pages-right {
+    top: 2px; bottom: 2px; right: 0;
+    width: var(--book-thick, 16px);
+    transform: translateX(calc(var(--book-thick, 16px) / 2)) rotateY(90deg);
+    background: repeating-linear-gradient(to right,
+      #f5f0e4 0px, #f5f0e4 1px,
+      #dcd3c2 1px, #dcd3c2 2px);
+    box-shadow: inset 0 0 6px rgba(0,0,0,0.18);
+  }
+  /* top edge */
+  .book3d-top {
+    left: 0; right: 0; top: 0;
+    height: var(--book-thick, 16px);
+    transform: translateY(calc(var(--book-thick, 16px) / -2)) rotateX(90deg);
+    background: repeating-linear-gradient(to right,
+      #f5f0e4 0px, #f5f0e4 1px,
+      #e0d7c6 1px, #e0d7c6 2px);
+    box-shadow: inset 0 -2px 5px rgba(0,0,0,0.2);
+  }
+  /* bottom edge */
+  .book3d-bottom {
+    left: 0; right: 0; bottom: 0;
+    height: var(--book-thick, 16px);
+    transform: translateY(calc(var(--book-thick, 16px) / 2)) rotateX(-90deg);
+    background: repeating-linear-gradient(to right,
+      #ece5d6 0px, #ece5d6 1px,
+      #d5cbb8 1px, #d5cbb8 2px);
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.28);
+  }
+
   .book3d-back-title { font-size: 1rem; font-weight: 500; line-height: 1.35; }
   .book3d-back-author { font-size: 0.82rem; color: var(--text3); }
   .book3d-back-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .book3d-back-notes {
     font-size: 0.78rem; color: var(--text2); line-height: 1.6;
     background: var(--bg2); padding: 8px 10px; border-radius: var(--radius-sm);
-    max-height: 90px; overflow-y: auto;
+    max-height: 84px; overflow-y: auto;
   }
   .book3d-actions { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
   .book3d-btn {
@@ -1774,7 +1800,7 @@
   .book3d-btn.secondary { background: var(--bg3); color: var(--text2); }
   .book3d-btn:hover { opacity: 0.85; }
   .book3d-hint {
-    margin-top: 26px; color: rgba(255,255,255,0.85); font-size: 0.8rem;
+    margin-top: 30px; color: rgba(255,255,255,0.85); font-size: 0.8rem;
     display: flex; align-items: center; gap: 6px;
     animation: fadeIn 0.6s ease 0.5s both;
     text-shadow: 0 1px 4px rgba(0,0,0,0.5);
@@ -5653,63 +5679,113 @@ function BookSpine({ book, onClick }) {
   );
 }
 
-/* ── Book3DModal — pull book off shelf, swipe/tap to flip ── */
+/* ── Book3DModal — true 3D box, drag to rotate ── */
 function Book3DModal({ book, onClose, onOpenDetail, onEdit }) {
-  const [flipped, setFlipped] = useState(false);
-  const [colors, setColors] = useState(null);
-  const touchStart = React.useRef(null);
+  const [rotation, setRotation] = useState(0);   // current Y rotation in degrees
+  const [dragging, setDragging] = useState(false);
+  const [snapping, setSnapping] = useState(false);
+  const [animDone, setAnimDone] = useState(false);
+  const [colors, setColors]     = useState(null);
+  const dragRef = React.useRef({ startX: 0, startRot: 0 });
 
   useEffect(() => {
     let mounted = true;
     if (book.coverUrl) getAvgColor(book.coverUrl).then(c => { if (mounted) setColors(c); });
-    return () => { mounted = false; };
+    const t = setTimeout(() => setAnimDone(true), 1100);
+    return () => { mounted = false; clearTimeout(t); };
   }, [book.coverUrl]);
 
   const c = colors || { light: '#a89e8e', dark: '#7a7060' };
 
-  // Thickness from page count (matches shelf spine width, scaled for the big view)
+  // Thickness from page count
   const pages = parseInt(book.pageCount) || 0;
   const thickness = pages > 0
-    ? Math.max(8, Math.min(34, Math.round(pages / 22) + 7))
-    : 13;
+    ? Math.max(9, Math.min(38, Math.round(pages / 20) + 8))
+    : 15;
 
-  const handleTouchStart = e => { touchStart.current = e.touches[0].clientX; };
-  const handleTouchEnd = e => {
-    if (touchStart.current === null) return;
-    const diff = e.changedTouches[0].clientX - touchStart.current;
-    if (Math.abs(diff) > 45) setFlipped(f => !f);
-    touchStart.current = null;
+  // ── Drag handlers ──
+  const onPointerDown = e => {
+    if (!animDone) return;
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    dragRef.current = { startX: x, startRot: rotation };
+    setDragging(true);
+    setSnapping(false);
   };
+
+  const onPointerMove = e => {
+    if (!dragging) return;
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    const delta = x - dragRef.current.startX;
+    setRotation(dragRef.current.startRot + delta * 0.65);
+  };
+
+  const onPointerUp = () => {
+    if (!dragging) return;
+    setDragging(false);
+    setSnapping(true);
+    // snap to nearest 180° (front or back facing viewer)
+    const snapped = Math.round(rotation / 180) * 180;
+    setRotation(snapped);
+    setTimeout(() => setSnapping(false), 560);
+  };
+
+  // Tap (no drag) flips 180°
+  const handleTap = () => {
+    if (!animDone || dragging) return;
+    setSnapping(true);
+    setRotation(r => r + 180);
+    setTimeout(() => setSnapping(false), 560);
+  };
+
+  const normalized = ((rotation % 360) + 360) % 360;
+  const showingBack = normalized > 90 && normalized < 270;
+
+  const stageStyle = {
+    '--book-thick': thickness + 'px',
+  };
+  // Only apply manual transform after the pull-out animation finishes
+  if (animDone) stageStyle.transform = `rotateY(${rotation}deg)`;
 
   return React.createElement('div', {
     className: 'book3d-overlay',
     onClick: e => e.target === e.currentTarget && onClose(),
-    onTouchStart: handleTouchStart,
-    onTouchEnd: handleTouchEnd,
+    onMouseMove: onPointerMove,
+    onMouseUp: onPointerUp,
+    onMouseLeave: onPointerUp,
+    onTouchMove: onPointerMove,
+    onTouchEnd: onPointerUp,
   },
     React.createElement('button', { className: 'book3d-close', onClick: onClose }, '✕'),
     React.createElement('div', {
-      className: 'book3d-stage' + (flipped ? ' flipped' : ''),
-      style: { '--book-thick': thickness + 'px' },
-      onClick: e => { e.stopPropagation(); setFlipped(f => !f); }
+      className: 'book3d-stage' + (dragging ? ' dragging' : '') + (snapping ? ' snapping' : ''),
+      style: stageStyle,
+      onMouseDown: onPointerDown,
+      onTouchStart: onPointerDown,
+      onClick: e => { e.stopPropagation(); handleTap(); }
     },
-      /* front — cover */
+      /* front cover */
       React.createElement('div', { className: 'book3d-face book3d-front' },
         book.coverUrl
-          ? React.createElement('img', { src: book.coverUrl, alt: '' })
+          ? React.createElement('img', { src: book.coverUrl, alt: '', draggable: false })
           : '📖'
       ),
-      /* physical spine edge (left side, colored like the book) */
+      /* spine (left side) — blurred cover like on the shelf */
       React.createElement('div', {
-        className: 'book3d-spine-edge',
+        className: 'book3d-face book3d-spine',
         style: book.coverUrl
-          ? { backgroundImage: `url(${book.coverUrl})`, backgroundSize: 'cover', backgroundPosition: 'left center', filter: 'blur(3px) brightness(0.75)' }
+          ? { backgroundImage: `url(${book.coverUrl})`, filter: 'blur(2px) brightness(0.72) saturate(1.15)' }
           : { background: `linear-gradient(180deg, ${c.dark}, ${c.light})` }
       }),
-      /* page edges (right side, paper texture) */
-      React.createElement('div', { className: 'book3d-pages' }),
-      /* back — details */
-      React.createElement('div', { className: 'book3d-face book3d-back', onClick: e => e.stopPropagation() },
+      /* page edges (right side) */
+      React.createElement('div', { className: 'book3d-face book3d-pages-right' }),
+      /* top & bottom edges */
+      React.createElement('div', { className: 'book3d-face book3d-top' }),
+      React.createElement('div', { className: 'book3d-face book3d-bottom' }),
+      /* back cover — details */
+      React.createElement('div', {
+        className: 'book3d-face book3d-back',
+        onClick: e => { if (showingBack) e.stopPropagation(); }
+      },
         React.createElement('div', { className: 'book3d-back-title' }, book.title),
         book.author && React.createElement('div', { className: 'book3d-back-author' }, book.author),
         React.createElement('div', { className: 'book3d-back-row' },
@@ -5721,14 +5797,14 @@ function Book3DModal({ book, onClose, onOpenDetail, onEdit }) {
         ),
         book.notes && React.createElement('div', { className: 'book3d-back-notes' }, book.notes),
         React.createElement('div', { className: 'book3d-actions' },
-          React.createElement('button', { className: 'book3d-btn primary', onClick: () => onOpenDetail(book) }, '查看完整詳情'),
-          React.createElement('button', { className: 'book3d-btn secondary', onClick: () => onEdit(book) }, '編輯這本書')
+          React.createElement('button', { className: 'book3d-btn primary', onClick: e => { e.stopPropagation(); onOpenDetail(book); } }, '查看完整詳情'),
+          React.createElement('button', { className: 'book3d-btn secondary', onClick: e => { e.stopPropagation(); onEdit(book); } }, '編輯這本書')
         )
       )
     ),
     React.createElement('div', { className: 'book3d-hint' },
       React.createElement('i', { className: 'ph-duotone ph-hand-swipe-left' }),
-      flipped ? '滑動或點擊看封面' : '滑動或點擊翻到背面'
+      '左右拖曳轉動書本'
     )
   );
 }
