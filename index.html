@@ -5638,16 +5638,18 @@ function BookSpine({ book, onClick }) {
   }, [book.coverUrl]);
 
   // ── Real physical dimensions ──
-  // Calibration: 400 pages ≈ 2cm thick; display scale ~9px per cm
-  const PX_PER_CM = 9;
+  // Calibration: 400 pages ≈ 2cm thick
+  // Height uses 9px/cm; thickness uses a larger scale so spines stay readable
+  const PX_PER_CM_H = 9;    // height scale
+  const PX_PER_CM_W = 17;   // thickness scale (visually widened)
   const pages = parseInt(book.pageCount) || 0;
   const thickCm = pages > 0 ? (pages / 400) * 2 : 1.6;  // default 1.6cm
-  const width = Math.max(11, Math.round(thickCm * PX_PER_CM));
+  const width = Math.max(24, Math.round(thickCm * PX_PER_CM_W));
 
   // Height: use explicit cm if given, else fall back to 開本 preset
   const heightCmMap = { pocket: 15, small: 19, normal: 21, large: 26 };
   const heightCm = parseFloat(book.bookHeight) || heightCmMap[book.bookSize] || 21;
-  const height = Math.round(heightCm * PX_PER_CM);
+  const height = Math.round(heightCm * PX_PER_CM_H);
 
   // Auto-shrink font when title is long
   const titleLen = (book.title || '').length;
@@ -5718,7 +5720,7 @@ function Book3DModal({ book, onClose, onOpenDetail, onEdit }) {
   const heightCmMap = { pocket: 15, small: 19, normal: 21, large: 26 };
   const bookHeightCm = parseFloat(book.bookHeight) || heightCmMap[book.bookSize] || 21;
   const scale = 300 / bookHeightCm;  // px per cm in the modal
-  const thickness = Math.max(6, Math.round(thickCm * scale));
+  const thickness = Math.max(10, Math.round(thickCm * scale * 1.35));
 
   // ── Drag handlers ──
   const onPointerDown = e => {
