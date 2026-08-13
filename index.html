@@ -1651,6 +1651,23 @@
     box-shadow: inset -4px 0 8px rgba(0,0,0,0.28), inset 3px 0 4px rgba(255,255,255,0.14);
     transition: transform 0.2s ease;
     overflow: hidden;
+    isolation: isolate;
+  }
+  .book-spine-bg {
+    position: absolute; inset: 0;
+    background-size: cover; background-position: center;
+    filter: blur(6px) saturate(1.25) brightness(0.82);
+    transform: scale(1.4);
+    z-index: -1;
+  }
+  .book-spine-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(100deg,
+      rgba(0,0,0,0.42) 0%,
+      rgba(0,0,0,0.05) 40%,
+      rgba(0,0,0,0.05) 62%,
+      rgba(0,0,0,0.42) 100%);
+    z-index: -1;
   }
   .book-spine:hover { transform: translateY(-8px); }
   .book-spine:active { transform: translateY(-4px); }
@@ -1685,16 +1702,17 @@
     position: relative;
     width: 210px; height: 300px;
     transform-style: preserve-3d;
-    transition: transform 0.65s cubic-bezier(0.34, 1.1, 0.4, 1);
-    transform: rotateY(-14deg) rotateX(2deg);
-    animation: bookPullOut 0.7s cubic-bezier(0.22, 1.05, 0.4, 1);
+    transition: transform 0.85s cubic-bezier(0.34, 1.05, 0.4, 1);
+    transform: rotateY(0deg);
+    animation: bookPullOut 1.05s cubic-bezier(0.22, 1.0, 0.36, 1);
   }
   @keyframes bookPullOut {
-    0%   { transform: translateY(160px) translateZ(-300px) rotateY(-78deg) scale(0.4); opacity: 0; }
-    45%  { opacity: 1; }
-    100% { transform: translateY(0) translateZ(0) rotateY(-14deg) rotateX(2deg) scale(1); opacity: 1; }
+    0%   { transform: translateY(180px) translateZ(-320px) rotateY(-82deg) scale(0.35); opacity: 0; }
+    35%  { opacity: 1; }
+    75%  { transform: translateY(-8px) translateZ(0) rotateY(-8deg) scale(1.02); }
+    100% { transform: translateY(0) translateZ(0) rotateY(0deg) scale(1); opacity: 1; }
   }
-  .book3d-stage.flipped { transform: rotateY(166deg) rotateX(2deg); }
+  .book3d-stage.flipped { transform: rotateY(180deg); }
   .book3d-face {
     position: absolute; inset: 0;
     backface-visibility: hidden;
@@ -1710,8 +1728,8 @@
   .book3d-front img { width: 100%; height: 100%; object-fit: cover; }
   /* page edges — the physical thickness on the right side */
   .book3d-pages {
-    position: absolute; top: 3px; bottom: 3px; right: -14px;
-    width: 14px;
+    position: absolute; top: 3px; bottom: 3px; right: calc(var(--book-thick, 14px) * -1);
+    width: var(--book-thick, 14px);
     background: repeating-linear-gradient(
       to right,
       #f2ece0 0px, #f2ece0 1px,
@@ -1724,8 +1742,8 @@
   }
   /* spine — visible left edge */
   .book3d-spine-edge {
-    position: absolute; top: 0; bottom: 0; left: -14px;
-    width: 14px;
+    position: absolute; top: 0; bottom: 0; left: calc(var(--book-thick, 14px) * -1);
+    width: var(--book-thick, 14px);
     transform: rotateY(-90deg);
     transform-origin: right center;
     border-radius: 3px 0 0 3px;
@@ -5582,23 +5600,18 @@ function BookSpine({ book, onClick }) {
     return () => { mounted = false; };
   }, [book.coverUrl]);
 
-  const fallback = { light: '#a89e8e', dark: '#7a7060' };
-  const c = colors || fallback;
-
   // ── Real physical dimensions ──
-  // Thickness from page count: ~1px per 12 pages, clamped 22–70px
   const pages = parseInt(book.pageCount) || 0;
   const width = pages > 0
     ? Math.max(22, Math.min(70, Math.round(pages / 12) + 18))
-    : 32; // default when no page count
+    : 32;
 
-  // Height from book size (開本)
   const heightMap = { pocket: 120, small: 142, normal: 165, large: 195 };
   const height = heightMap[book.bookSize] || heightMap.normal;
 
-  // Auto-shrink font when title is long relative to available height
+  // Auto-shrink font when title is long
   const titleLen = (book.title || '').length;
-  const availableChars = Math.floor(height / 14); // rough estimate at base font
+  const availableChars = Math.floor(height / 14);
   let fontSize = 0.8;
   if (titleLen > availableChars) {
     fontSize = Math.max(0.5, 0.8 * (availableChars / titleLen));
@@ -5611,16 +5624,27 @@ function BookSpine({ book, onClick }) {
     dropped: '#d06060',
   }[book.status] || '#d4c088';
 
+  const fallback = colors || { light: '#a89e8e', dark: '#7a7060' };
+
   return React.createElement('div', {
     className: 'book-spine',
     style: {
       width: width + 'px',
       height: height + 'px',
-      background: `linear-gradient(100deg, ${c.dark} 0%, ${c.light} 42%, ${c.light} 62%, ${c.dark} 100%)`,
+      // fallback gradient shows when no cover
+      background: book.coverUrl
+        ? 'transparent'
+        : `linear-gradient(100deg, ${fallback.dark} 0%, ${fallback.light} 42%, ${fallback.light} 62%, ${fallback.dark} 100%)`,
     },
     onClick: () => onClick(book),
     title: book.title
   },
+    // blurred cover as spine texture
+    book.coverUrl && React.createElement('div', {
+      className: 'book-spine-bg',
+      style: { backgroundImage: `url(${book.coverUrl})` }
+    }),
+    book.coverUrl && React.createElement('div', { className: 'book-spine-overlay' }),
     React.createElement('div', { className: 'book-spine-status-dot', style: { background: statusColor } }),
     React.createElement('div', {
       className: 'book-spine-title',
@@ -5643,6 +5667,12 @@ function Book3DModal({ book, onClose, onOpenDetail, onEdit }) {
 
   const c = colors || { light: '#a89e8e', dark: '#7a7060' };
 
+  // Thickness from page count (matches shelf spine width, scaled for the big view)
+  const pages = parseInt(book.pageCount) || 0;
+  const thickness = pages > 0
+    ? Math.max(8, Math.min(34, Math.round(pages / 22) + 7))
+    : 13;
+
   const handleTouchStart = e => { touchStart.current = e.touches[0].clientX; };
   const handleTouchEnd = e => {
     if (touchStart.current === null) return;
@@ -5660,6 +5690,7 @@ function Book3DModal({ book, onClose, onOpenDetail, onEdit }) {
     React.createElement('button', { className: 'book3d-close', onClick: onClose }, '✕'),
     React.createElement('div', {
       className: 'book3d-stage' + (flipped ? ' flipped' : ''),
+      style: { '--book-thick': thickness + 'px' },
       onClick: e => { e.stopPropagation(); setFlipped(f => !f); }
     },
       /* front — cover */
@@ -5671,7 +5702,9 @@ function Book3DModal({ book, onClose, onOpenDetail, onEdit }) {
       /* physical spine edge (left side, colored like the book) */
       React.createElement('div', {
         className: 'book3d-spine-edge',
-        style: { background: `linear-gradient(180deg, ${c.dark}, ${c.light})` }
+        style: book.coverUrl
+          ? { backgroundImage: `url(${book.coverUrl})`, backgroundSize: 'cover', backgroundPosition: 'left center', filter: 'blur(3px) brightness(0.75)' }
+          : { background: `linear-gradient(180deg, ${c.dark}, ${c.light})` }
       }),
       /* page edges (right side, paper texture) */
       React.createElement('div', { className: 'book3d-pages' }),
