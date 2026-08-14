@@ -1706,6 +1706,18 @@
     animation: bookPullOut 1.05s cubic-bezier(0.22, 1.0, 0.36, 1);
     cursor: grab;
   }
+  /* soft contact shadow beneath the book */
+  .book3d-shadow {
+    position: absolute; bottom: -34px; left: 50%;
+    width: 190px; height: 26px;
+    transform: translateX(-50%) rotateX(84deg);
+    background: radial-gradient(ellipse at center,
+      rgba(0,0,0,0.42) 0%,
+      rgba(0,0,0,0.18) 45%,
+      rgba(0,0,0,0) 72%);
+    filter: blur(7px);
+    pointer-events: none;
+  }
   .book3d-stage.dragging { cursor: grabbing; }
   .book3d-stage.snapping { transition: transform 0.55s cubic-bezier(0.34, 1.05, 0.4, 1); }
   @keyframes bookPullOut {
@@ -1720,7 +1732,7 @@
     position: absolute;
     backface-visibility: hidden;
   }
-  /* front cover */
+  /* front cover — with gloss + edge shading */
   .book3d-front {
     inset: 0;
     transform: translateZ(calc(var(--book-thick, 16px) / 2));
@@ -1729,9 +1741,29 @@
     background: var(--bg3);
     display: flex; align-items: center; justify-content: center;
     font-size: 3.5rem; color: var(--text3);
-    box-shadow: 0 0 0 1px rgba(0,0,0,0.12);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.14);
   }
-  .book3d-front img { width: 100%; height: 100%; object-fit: cover; }
+  .book3d-front img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* hinge shadow near the spine (left edge of cover) */
+  .book3d-front::before {
+    content: ''; position: absolute; top: 0; bottom: 0; left: 0;
+    width: 16px; pointer-events: none;
+    background: linear-gradient(to right,
+      rgba(0,0,0,0.32) 0%,
+      rgba(0,0,0,0.14) 35%,
+      rgba(0,0,0,0) 100%);
+  }
+  /* diagonal gloss sweep — coated paper sheen */
+  .book3d-front::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(112deg,
+      rgba(255,255,255,0) 28%,
+      rgba(255,255,255,0.16) 43%,
+      rgba(255,255,255,0.26) 50%,
+      rgba(255,255,255,0.10) 57%,
+      rgba(255,255,255,0) 72%);
+    mix-blend-mode: screen;
+  }
   /* back cover (details panel) */
   .book3d-back {
     inset: 0;
@@ -1749,37 +1781,76 @@
     width: var(--book-thick, 16px);
     transform: translateX(calc(var(--book-thick, 16px) / -2)) rotateY(-90deg);
     background-size: cover; background-position: center;
-    box-shadow: inset 2px 0 6px rgba(0,0,0,0.35), inset -2px 0 5px rgba(0,0,0,0.25);
+    border-radius: 3px 0 0 3px;
+    overflow: hidden;
+  }
+  /* rounded-spine curvature: light down the middle, dark at both edges */
+  .book3d-spine::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(to right,
+      rgba(0,0,0,0.45) 0%,
+      rgba(0,0,0,0.12) 22%,
+      rgba(255,255,255,0.18) 48%,
+      rgba(255,255,255,0.08) 58%,
+      rgba(0,0,0,0.15) 80%,
+      rgba(0,0,0,0.42) 100%);
+  }
+  /* head & tail bands (書頭布) */
+  .book3d-spine::before {
+    content: ''; position: absolute; left: 0; right: 0;
+    top: 0; height: 5px; pointer-events: none; z-index: 2;
+    background: repeating-linear-gradient(45deg,
+      #d8c4a0 0px, #d8c4a0 2px,
+      #a88c60 2px, #a88c60 4px);
+    box-shadow: 0 5px 0 -1px rgba(0,0,0,0.25);
   }
   /* right side = page edges */
   .book3d-pages-right {
     top: 2px; bottom: 2px; right: 0;
     width: var(--book-thick, 16px);
     transform: translateX(calc(var(--book-thick, 16px) / 2)) rotateY(90deg);
-    background: repeating-linear-gradient(to right,
-      #f5f0e4 0px, #f5f0e4 1px,
-      #dcd3c2 1px, #dcd3c2 2px);
-    box-shadow: inset 0 0 6px rgba(0,0,0,0.18);
+    background:
+      linear-gradient(to right,
+        rgba(0,0,0,0.22) 0%,
+        rgba(0,0,0,0.04) 12%,
+        rgba(255,255,255,0.10) 45%,
+        rgba(0,0,0,0.06) 82%,
+        rgba(0,0,0,0.26) 100%),
+      repeating-linear-gradient(to right,
+        #f7f2e6 0px, #f7f2e6 1px,
+        #e3dac8 1px, #e3dac8 2px,
+        #efe8d8 2px, #efe8d8 3px);
+    box-shadow: inset 0 3px 6px rgba(0,0,0,0.16), inset 0 -3px 6px rgba(0,0,0,0.16);
   }
   /* top edge */
   .book3d-top {
     left: 0; right: 0; top: 0;
     height: var(--book-thick, 16px);
     transform: translateY(calc(var(--book-thick, 16px) / -2)) rotateX(90deg);
-    background: repeating-linear-gradient(to right,
-      #f5f0e4 0px, #f5f0e4 1px,
-      #e0d7c6 1px, #e0d7c6 2px);
-    box-shadow: inset 0 -2px 5px rgba(0,0,0,0.2);
+    background:
+      linear-gradient(to bottom,
+        rgba(0,0,0,0.28) 0%,
+        rgba(255,255,255,0.10) 40%,
+        rgba(0,0,0,0.10) 100%),
+      repeating-linear-gradient(to right,
+        #f7f2e6 0px, #f7f2e6 1px,
+        #e5dccb 1px, #e5dccb 2px);
+    box-shadow: inset 0 -3px 6px rgba(0,0,0,0.22);
   }
   /* bottom edge */
   .book3d-bottom {
     left: 0; right: 0; bottom: 0;
     height: var(--book-thick, 16px);
     transform: translateY(calc(var(--book-thick, 16px) / 2)) rotateX(-90deg);
-    background: repeating-linear-gradient(to right,
-      #ece5d6 0px, #ece5d6 1px,
-      #d5cbb8 1px, #d5cbb8 2px);
-    box-shadow: inset 0 2px 6px rgba(0,0,0,0.28);
+    background:
+      linear-gradient(to top,
+        rgba(0,0,0,0.34) 0%,
+        rgba(255,255,255,0.06) 45%,
+        rgba(0,0,0,0.14) 100%),
+      repeating-linear-gradient(to right,
+        #ede6d7 0px, #ede6d7 1px,
+        #d9cfbb 1px, #d9cfbb 2px);
+    box-shadow: inset 0 3px 7px rgba(0,0,0,0.3);
   }
 
   .book3d-back-title { font-size: 1rem; font-weight: 500; line-height: 1.35; }
@@ -5841,6 +5912,8 @@ function Book3DModal({ book, onClose, onOpenDetail, onEdit }) {
       /* top & bottom edges */
       React.createElement('div', { className: 'book3d-face book3d-top' }),
       React.createElement('div', { className: 'book3d-face book3d-bottom' }),
+      /* contact shadow on the ground */
+      React.createElement('div', { className: 'book3d-shadow' }),
       /* back cover — details */
       React.createElement('div', {
         className: 'book3d-face book3d-back',
