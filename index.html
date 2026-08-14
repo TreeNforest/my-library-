@@ -3972,7 +3972,7 @@ function BorrowPage({ db, showToast, externalShowForm, onExternalFormClose }) {
 }
 
 /* ── SeriesPage ── */
-function SeriesPage({ books, db, showToast, externalShowForm, onExternalFormClose }) {
+function SeriesPage({ books, db, showToast, search = '', view = 'grid', externalShowForm, onExternalFormClose }) {
   const [series, setSeries]       = useState([]);
   const [loading, setLoading]     = useState(true);
   const [showForm, setShowForm]   = useState(false);
@@ -4171,6 +4171,65 @@ function SeriesPage({ books, db, showToast, externalShowForm, onExternalFormClos
     );
   };
 
+  // Filter by search
+  const q = search.trim().toLowerCase();
+  const filteredSeries = q
+    ? series.filter(s =>
+        s.name?.toLowerCase().includes(q) ||
+        getSeriesBooks(s).some(b => b.title?.toLowerCase().includes(q) || b.author?.toLowerCase().includes(q))
+      )
+    : series;
+
+  const renderGrid = () => React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' } },
+    filteredSeries.map(s => {
+      const sBooks = getSeriesBooks(s);
+      const done   = sBooks.filter(b => b.status === 'done').length;
+      const pct    = sBooks.length ? Math.round(done / sBooks.length * 100) : 0;
+      return React.createElement('div', { key: s.id, className: 'series-card', onClick: () => setDetailItem(s) },
+        React.createElement('div', { className: 'series-cover-row' },
+          sBooks.slice(0, 3).map((b, i) =>
+            React.createElement('div', { key: i, className: 'series-cover-slot' },
+              b.coverUrl ? React.createElement('img', { src: b.coverUrl, alt: '' }) : '📖'
+            )
+          ),
+          sBooks.length === 0 && React.createElement('div', { className: 'series-cover-slot' }, '📚')
+        ),
+        React.createElement('div', { className: 'series-info' },
+          React.createElement('div', { className: 'series-name' }, s.name),
+          React.createElement('div', { className: 'series-meta' }, `${sBooks.length} 本・${done} 讀完`),
+          React.createElement('div', { className: 'series-progress' },
+            React.createElement('div', { className: 'series-progress-fill', style: { width: pct + '%' } })
+          )
+        )
+      );
+    })
+  );
+
+  // Shelf view: each series is a shelf row
+  const renderShelf = () => React.createElement('div', null,
+    filteredSeries.map(s => {
+      const sBooks = getSeriesBooks(s);
+      const done   = sBooks.filter(b => b.status === 'done').length;
+      return React.createElement('div', { key: s.id, className: 'bookshelf-group' },
+        React.createElement('div', {
+          className: 'bookshelf-group-title',
+          style: { cursor: 'pointer' },
+          onClick: () => setDetailItem(s)
+        }, `${s.name}（${sBooks.length} 本・${done} 讀完）`),
+        React.createElement('div', { className: 'bookshelf-unit' },
+          React.createElement('div', { className: 'bookshelf-row' },
+            React.createElement('div', { className: 'bookshelf-books-wrap' },
+              sBooks.length > 0
+                ? sBooks.map(b => React.createElement(BookSpine, { key: b.id, book: b, onClick: () => setDetailItem(s) }))
+                : React.createElement('div', { style: { color: 'var(--text3)', fontSize: '0.8rem', padding: '20px 8px' } }, '尚未加入書籍')
+            )
+          ),
+          React.createElement('div', { className: 'bookshelf-plank' })
+        )
+      );
+    })
+  );
+
   return React.createElement(React.Fragment, null,
     loading
       ? React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }), '載入中…')
@@ -4180,30 +4239,12 @@ function SeriesPage({ books, db, showToast, externalShowForm, onExternalFormClos
             React.createElement('div', { className: 'empty-title' }, '還沒有套書系列'),
             React.createElement('div', { className: 'empty-desc' }, '點右下角 ＋ 建立第一個系列')
           )
-        : React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' } },
-            series.map(s => {
-              const sBooks = getSeriesBooks(s);
-              const done   = sBooks.filter(b => b.status === 'done').length;
-              const pct    = sBooks.length ? Math.round(done / sBooks.length * 100) : 0;
-              return React.createElement('div', { key: s.id, className: 'series-card', onClick: () => setDetailItem(s) },
-                React.createElement('div', { className: 'series-cover-row' },
-                  sBooks.slice(0, 3).map((b, i) =>
-                    React.createElement('div', { key: i, className: 'series-cover-slot' },
-                      b.coverUrl ? React.createElement('img', { src: b.coverUrl, alt: '' }) : '📖'
-                    )
-                  ),
-                  sBooks.length === 0 && React.createElement('div', { className: 'series-cover-slot' }, '📚')
-                ),
-                React.createElement('div', { className: 'series-info' },
-                  React.createElement('div', { className: 'series-name' }, s.name),
-                  React.createElement('div', { className: 'series-meta' }, `${sBooks.length} 本・${done} 讀完`),
-                  React.createElement('div', { className: 'series-progress' },
-                    React.createElement('div', { className: 'series-progress-fill', style: { width: pct + '%' } })
-                  )
-                )
-              );
-            })
-          ),
+        : filteredSeries.length === 0
+          ? React.createElement('div', { className: 'empty-state' },
+              React.createElement('div', { className: 'empty-icon' }, '🔍'),
+              React.createElement('div', { className: 'empty-title' }, '找不到符合的系列')
+            )
+          : view === 'shelf' ? renderShelf() : renderGrid(),
     showForm && React.createElement(SeriesForm, {
       item: editItem, onClose: () => { setShowForm(false); setEditItem(null); }
     }),
@@ -6101,8 +6142,8 @@ function App() {
         : page === 'progress'
         ? React.createElement(ProgressPage, { books, dramas: items, db, showToast })
         : React.createElement(React.Fragment, null,
-      /* stats */
-      React.createElement('div', { className: 'stats-bar' },
+      /* stats — books view only */
+      shelfView === 'books' && React.createElement('div', { className: 'stats-bar' },
         React.createElement('div', { className: 'stat-card' },
           React.createElement('div', { className: 'stat-num' }, totalBooks),
           React.createElement('div', { className: 'stat-label' }, '總讀書量')
@@ -6139,8 +6180,8 @@ function App() {
         )
       ),
 
-      /* status tabs */
-      React.createElement('div', { className: 'status-tabs' },
+      /* status tabs — books view only */
+      shelfView === 'books' && React.createElement('div', { className: 'status-tabs' },
         [
           { value: 'all',     label: '全部' },
           { value: 'unread',  label: '📚 未讀' },
@@ -6156,16 +6197,17 @@ function App() {
         )
       ),
 
-      /* toolbar */
-      React.createElement('div', { className: 'toolbar' },
+      /* toolbar — books & series only */
+      (shelfView === 'books' || shelfView === 'series') && React.createElement('div', { className: 'toolbar' },
         React.createElement('div', { className: 'search-wrap' },
           React.createElement('i', { className: 'ph-duotone ph-magnifying-glass search-icon' }),
           React.createElement('input', {
-            type: 'text', placeholder: '搜尋書名、作者或標籤…',
+            type: 'text',
+            placeholder: shelfView === 'series' ? '搜尋系列名稱…' : '搜尋書名、作者或標籤…',
             value: search, onChange: e => setSearch(e.target.value)
           })
         ),
-        React.createElement('select', {
+        shelfView === 'books' && React.createElement('select', {
           className: 'filter-select', value: catFilter,
           onChange: e => setCatFilter(e.target.value)
         }, allCats.map(c =>
@@ -6173,7 +6215,7 @@ function App() {
         )),
         React.createElement('div', { className: 'view-toggle' },
           React.createElement('button', { className: `view-btn${view==='grid' ? ' active' : ''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
-          React.createElement('button', { className: `view-btn${view==='list' ? ' active' : ''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' })),
+          shelfView === 'books' && React.createElement('button', { className: `view-btn${view==='list' ? ' active' : ''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' })),
           React.createElement('button', { className: `view-btn${view==='shelf' ? ' active' : ''}`, onClick: () => setView('shelf') }, React.createElement('i', { className: 'ph-duotone ph-books' }))
         )
       ),
@@ -6185,7 +6227,7 @@ function App() {
             '載入中…'
           )
         : shelfView === 'series'
-          ? React.createElement(SeriesPage, { books, db, showToast, externalShowForm: seriesShowForm, onExternalFormClose: () => setSeriesShowForm(false) })
+          ? React.createElement(SeriesPage, { books, db, showToast, search, view, externalShowForm: seriesShowForm, onExternalFormClose: () => setSeriesShowForm(false) })
         : shelfView === 'wishlist'
           ? React.createElement(WishlistPage, {
               db, showToast, books,
