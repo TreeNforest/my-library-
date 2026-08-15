@@ -1917,7 +1917,7 @@ import { createRoot } from 'react-dom/client';
 import { initializeApp } from 'firebase/app';
 import {
   getFirestore, collection, addDoc, updateDoc, deleteDoc,
-  doc, onSnapshot, serverTimestamp, query, orderBy, getDoc, setDoc
+  doc, onSnapshot, serverTimestamp, query, orderBy, getDoc, setDoc, getDocs
 } from 'firebase/firestore';
 
 /* ── Firebase config ── */
@@ -5808,12 +5808,13 @@ function BookSpine({ book, onClick }) {
 }
 
 /* ── Book3DModal — true 3D box, drag to rotate ── */
-function Book3DModal({ book, onClose, onOpenDetail, onEdit }) {
+function Book3DModal({ book, db, onClose, onOpenDetail, onEdit }) {
   const [rotation, setRotation] = useState(0);   // current Y rotation in degrees
   const [dragging, setDragging] = useState(false);
   const [snapping, setSnapping] = useState(false);
   const [animDone, setAnimDone] = useState(false);
   const [colors, setColors]     = useState(null);
+  const [startDate, setStartDate] = useState(null);
   const dragRef = React.useRef({ startX: 0, startRot: 0 });
 
   useEffect(() => {
@@ -5822,6 +5823,19 @@ function Book3DModal({ book, onClose, onOpenDetail, onEdit }) {
     const t = setTimeout(() => setAnimDone(true), 1100);
     return () => { mounted = false; clearTimeout(t); };
   }, [book.coverUrl]);
+
+  // Fetch first progress log = start reading date
+  useEffect(() => {
+    if (!db || !book.id) return;
+    let mounted = true;
+    getDocs(query(collection(db, 'books', book.id, 'logs'), orderBy('date', 'asc')))
+      .then(snap => {
+        if (!mounted || snap.empty) return;
+        setStartDate(snap.docs[0].data().date);
+      })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, [book.id]);
 
   const c = colors || { light: '#a89e8e', dark: '#7a7060' };
 
@@ -5928,6 +5942,18 @@ function Book3DModal({ book, onClose, onOpenDetail, onEdit }) {
         book.category && React.createElement('div', { className: 'book3d-back-row' },
           React.createElement('span', { className: 'tag' }, book.category)
         ),
+        (startDate || book.dateRead) && React.createElement('div', {
+          style: { fontSize: '0.74rem', color: 'var(--text3)', lineHeight: 1.7, borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', padding: '6px 0' }
+        },
+          startDate && React.createElement('div', null,
+            React.createElement('i', { className: 'ph-duotone ph-play-circle', style: { marginRight: '4px' } }),
+            '開始閱讀 ' + startDate
+          ),
+          book.dateRead && React.createElement('div', null,
+            React.createElement('i', { className: 'ph-duotone ph-check-circle', style: { marginRight: '4px' } }),
+            '讀完 ' + book.dateRead
+          )
+        ),
         book.notes && React.createElement('div', { className: 'book3d-back-notes' }, book.notes),
         React.createElement('div', { className: 'book3d-actions' },
           React.createElement('button', { className: 'book3d-btn primary', onClick: e => { e.stopPropagation(); onOpenDetail(book); } }, '查看完整詳情'),
@@ -5943,7 +5969,7 @@ function Book3DModal({ book, onClose, onOpenDetail, onEdit }) {
 }
 
 /* ── BookshelfView ── */
-function BookshelfView({ books, onOpenDetail, onEdit }) {
+function BookshelfView({ books, db, onOpenDetail, onEdit }) {
   const [sortMode, setSortMode] = useState('category');
   const [openBook, setOpenBook] = useState(null);
 
@@ -5955,6 +5981,9 @@ function BookshelfView({ books, onOpenDetail, onEdit }) {
     ),
     React.createElement('div', { className: 'bookshelf-plank' })
   );
+
+  // Chinese stroke-order-friendly comparison (localeCompare with zh handles this well)
+  const cmpName = (a, b) => (a || '').localeCompare(b || '', 'zh-Hant');
 
   let content;
   if (sortMode === 'category') {
@@ -5971,9 +6000,18 @@ function BookshelfView({ books, onOpenDetail, onEdit }) {
       )
     );
   } else {
-    const sorted = sortMode === 'date'
-      ? [...books].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
-      : books;
+    let sorted = [...books];
+    if (sortMode === 'date') {
+      sorted.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+    } else if (sortMode === 'title') {
+      sorted.sort((a, b) => cmpName(a.title, b.title));
+    } else if (sortMode === 'thickness') {
+      sorted.sort((a, b) => (parseInt(b.pageCount) || 0) - (parseInt(a.pageCount) || 0));
+    } else if (sortMode === 'author') {
+      sorted.sort((a, b) => cmpName(a.author, b.author));
+    } else if (sortMode === 'finished') {
+      sorted.sort((a, b) => (b.dateRead || '').localeCompare(a.dateRead || ''));
+    }
     const rows = [];
     for (let i = 0; i < sorted.length; i += 10) rows.push(sorted.slice(i, i + 10));
     content = rows.map((r, i) =>
@@ -5981,11 +6019,24 @@ function BookshelfView({ books, onOpenDetail, onEdit }) {
     );
   }
 
+  const SORTS = [
+    { id: 'category',  label: '依分類' },
+    { id: 'title',     label: '依名稱' },
+    { id: 'author',    label: '依作者' },
+    { id: 'thickness', label: '依厚度' },
+    { id: 'finished',  label: '依讀完日期' },
+    { id: 'date',      label: '依新增日期' },
+  ];
+
   return React.createElement('div', null,
     React.createElement('div', { className: 'bookshelf-sort-row' },
-      React.createElement('button', { className: 'bookshelf-sort-btn' + (sortMode==='category'?' active':''), onClick: () => setSortMode('category') }, '依分類'),
-      React.createElement('button', { className: 'bookshelf-sort-btn' + (sortMode==='flat'?' active':''), onClick: () => setSortMode('flat') }, '全部一起'),
-      React.createElement('button', { className: 'bookshelf-sort-btn' + (sortMode==='date'?' active':''), onClick: () => setSortMode('date') }, '依新增日期')
+      SORTS.map(s =>
+        React.createElement('button', {
+          key: s.id,
+          className: 'bookshelf-sort-btn' + (sortMode === s.id ? ' active' : ''),
+          onClick: () => setSortMode(s.id)
+        }, s.label)
+      )
     ),
     books.length === 0
       ? React.createElement('div', { className: 'empty-state' },
@@ -5995,7 +6046,7 @@ function BookshelfView({ books, onOpenDetail, onEdit }) {
         )
       : content,
     openBook && React.createElement(Book3DModal, {
-      book: openBook,
+      book: openBook, db,
       onClose: () => setOpenBook(null),
       onOpenDetail: b => { setOpenBook(null); onOpenDetail(b); },
       onEdit: b => { setOpenBook(null); onEdit(b); }
@@ -6344,7 +6395,7 @@ function App() {
                   )
                 )
           : view === 'shelf'
-            ? React.createElement(BookshelfView, { books: filtered, onOpenDetail: b => setDetailBook(b), onEdit: b => { setEditBook(b); setShowForm(true); } })
+            ? React.createElement(BookshelfView, { books: filtered, db, onOpenDetail: b => setDetailBook(b), onEdit: b => { setEditBook(b); setShowForm(true); } })
           : filtered.length === 0
             ? React.createElement('div', { className: 'empty-state' },
                 React.createElement('div', { className: 'empty-icon' }, '📚'),
