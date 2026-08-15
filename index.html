@@ -1747,23 +1747,15 @@
   /* hinge shadow near the spine (left edge of cover) */
   .book3d-front::before {
     content: ''; position: absolute; top: 0; bottom: 0; left: 0;
-    width: 16px; pointer-events: none;
+    width: 20px; pointer-events: none;
     background: linear-gradient(to right,
-      rgba(0,0,0,0.32) 0%,
-      rgba(0,0,0,0.14) 35%,
+      rgba(0,0,0,0.10) 0%,
+      rgba(0,0,0,0.38) 22%,
+      rgba(0,0,0,0.30) 34%,
+      rgba(0,0,0,0.06) 62%,
       rgba(0,0,0,0) 100%);
   }
-  /* diagonal gloss sweep — coated paper sheen */
-  .book3d-front::after {
-    content: ''; position: absolute; inset: 0; pointer-events: none;
-    background: linear-gradient(112deg,
-      rgba(255,255,255,0) 28%,
-      rgba(255,255,255,0.16) 43%,
-      rgba(255,255,255,0.26) 50%,
-      rgba(255,255,255,0.10) 57%,
-      rgba(255,255,255,0) 72%);
-    mix-blend-mode: screen;
-  }
+
   /* back cover (details panel) */
   .book3d-back {
     inset: 0;
@@ -1780,20 +1772,42 @@
     top: 0; bottom: 0; left: 0;
     width: var(--book-thick, 16px);
     transform: translateX(calc(var(--book-thick, 16px) / -2)) rotateY(-90deg);
-    background-size: cover; background-position: center;
-    border-radius: 3px 0 0 3px;
+    border-radius: 4px 0 0 4px;
     overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    background-size: cover; background-position: center;
+    filter: none;
+  }
+  /* blurred cover as spine texture, kept behind the title */
+  .book3d-spine-bg {
+    position: absolute; inset: -4px;
+    background-size: cover; background-position: center;
+    filter: blur(3px) brightness(0.7) saturate(1.2);
+    z-index: 1;
+  }
+  /* spine title text */
+  .book3d-spine-title {
+    position: relative; z-index: 3;
+    writing-mode: vertical-rl; text-orientation: mixed;
+    font-size: 0.62rem; font-weight: 600;
+    color: rgba(255,255,255,0.95);
+    letter-spacing: 0.06em; line-height: 1.1;
+    max-height: 78%; white-space: nowrap; overflow: hidden;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.75), 0 0 6px rgba(0,0,0,0.4);
+    text-align: center;
   }
   /* rounded-spine curvature: light down the middle, dark at both edges */
   .book3d-spine::after {
-    content: ''; position: absolute; inset: 0; pointer-events: none;
+    content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
     background: linear-gradient(to right,
-      rgba(0,0,0,0.45) 0%,
-      rgba(0,0,0,0.12) 22%,
-      rgba(255,255,255,0.18) 48%,
-      rgba(255,255,255,0.08) 58%,
-      rgba(0,0,0,0.15) 80%,
-      rgba(0,0,0,0.42) 100%);
+      rgba(0,0,0,0.55) 0%,
+      rgba(0,0,0,0.30) 12%,
+      rgba(0,0,0,0.04) 30%,
+      rgba(255,255,255,0.22) 46%,
+      rgba(255,255,255,0.14) 56%,
+      rgba(0,0,0,0.08) 72%,
+      rgba(0,0,0,0.32) 88%,
+      rgba(0,0,0,0.55) 100%);
   }
   /* head & tail bands (書頭布) */
   .book3d-spine::before {
@@ -5917,10 +5931,14 @@ function Book3DModal({ book, db, onClose, onOpenDetail, onEdit }) {
       /* spine (left side) — blurred cover like on the shelf */
       React.createElement('div', {
         className: 'book3d-face book3d-spine',
-        style: book.coverUrl
-          ? { backgroundImage: `url(${book.coverUrl})`, filter: 'blur(2px) brightness(0.72) saturate(1.15)' }
-          : { background: `linear-gradient(180deg, ${c.dark}, ${c.light})` }
-      }),
+        style: book.coverUrl ? {} : { background: `linear-gradient(180deg, ${c.dark}, ${c.light})` }
+      },
+        book.coverUrl && React.createElement('div', {
+          className: 'book3d-spine-bg',
+          style: { backgroundImage: `url(${book.coverUrl})` }
+        }),
+        React.createElement('div', { className: 'book3d-spine-title' }, book.title)
+      ),
       /* page edges (right side) */
       React.createElement('div', { className: 'book3d-face book3d-pages-right' }),
       /* top & bottom edges */
