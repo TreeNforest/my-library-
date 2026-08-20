@@ -1809,6 +1809,15 @@
       rgba(0,0,0,0.32) 88%,
       rgba(0,0,0,0.55) 100%);
   }
+  /* real spine photo: keep it visible, only a light curvature hint */
+  .book3d-spine.has-real-spine::after {
+    background: linear-gradient(to right,
+      rgba(0,0,0,0.30) 0%,
+      rgba(0,0,0,0.08) 20%,
+      rgba(255,255,255,0.10) 48%,
+      rgba(0,0,0,0.06) 78%,
+      rgba(0,0,0,0.28) 100%);
+  }
   /* head & tail bands (書頭布) */
   .book3d-spine::before {
     content: ''; position: absolute; left: 0; right: 0;
@@ -2152,6 +2161,7 @@ function BookForm({ book, books = [], onClose, onSave }) {
   });
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(book?.coverUrl || '');
+  const [spinePreview, setSpinePreview] = useState(book?.spineUrl || '');
   const [isbn, setIsbn] = useState('');
   const [isbnLoading, setIsbnLoading] = useState(false);
   const [isbnMsg, setIsbnMsg] = useState(null); // { type: 'success'|'error', text }
@@ -2251,6 +2261,14 @@ function BookForm({ book, books = [], onClose, onSave }) {
     setForm(f => ({ ...f, coverUrl: b64 }));
   };
 
+  const handleSpine = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const b64 = await compressImage(file, 400);
+    setSpinePreview(b64);
+    setForm(f => ({ ...f, spineUrl: b64 }));
+  };
+
   const handleSubmit = async () => {
     if (!form.title.trim()) return;
     setSaving(true);
@@ -2266,6 +2284,7 @@ function BookForm({ book, books = [], onClose, onSave }) {
         rating:      form.rating,
         notes:       form.notes,
         coverUrl:    form.coverUrl,
+        spineUrl:    form.spineUrl,
         status:      form.status,
         purchasePrice: form.purchasePrice !== '' ? parseFloat(form.purchasePrice) : null,
         purchaseDate:  form.purchaseDate,
@@ -2443,6 +2462,19 @@ function BookForm({ book, books = [], onClose, onSave }) {
             React.createElement('div', { className: 'cover-upload-icon' }, '🖼'),
             React.createElement('div', { className: 'cover-upload-text' }, preview ? '點擊更換圖片' : '點擊上傳封面'),
             preview && React.createElement('img', { className: 'cover-preview', src: preview, alt: '' })
+          )
+        ),
+        /* spine image */
+        React.createElement('div', { className: 'form-group full' },
+          React.createElement('label', null, '書脊圖片（選填，用於書架顯示）'),
+          React.createElement('div', { className: 'cover-upload' },
+            React.createElement('input', { type: 'file', accept: 'image/*', onChange: handleSpine }),
+            React.createElement('div', { className: 'cover-upload-icon' }, '📕'),
+            React.createElement('div', { className: 'cover-upload-text' }, spinePreview ? '點擊更換書脊' : '上傳書脊照片，書架會直接顯示'),
+            spinePreview && React.createElement('img', {
+              src: spinePreview, alt: '',
+              style: { maxHeight: '140px', width: 'auto', margin: '10px auto 0', display: 'block', borderRadius: '3px' }
+            })
           )
         )
       ),
@@ -5794,27 +5826,38 @@ function BookSpine({ book, onClick }) {
 
   const fallback = colors || { light: '#a89e8e', dark: '#7a7060' };
 
+  const hasRealSpine = !!book.spineUrl;
+
   return React.createElement('div', {
     className: 'book-spine',
     style: {
       width: width + 'px',
       height: height + 'px',
-      // fallback gradient shows when no cover
-      background: book.coverUrl
+      background: hasRealSpine
         ? 'transparent'
-        : `linear-gradient(100deg, ${fallback.dark} 0%, ${fallback.light} 42%, ${fallback.light} 62%, ${fallback.dark} 100%)`,
+        : book.coverUrl
+          ? 'transparent'
+          : `linear-gradient(100deg, ${fallback.dark} 0%, ${fallback.light} 42%, ${fallback.light} 62%, ${fallback.dark} 100%)`,
     },
     onClick: () => onClick(book),
     title: book.title
   },
-    // blurred cover as spine texture
-    book.coverUrl && React.createElement('div', {
+    // real spine photo — shown as-is, no blur, no text overlay
+    hasRealSpine && React.createElement('div', {
+      style: {
+        position: 'absolute', inset: 0,
+        backgroundImage: `url(${book.spineUrl})`,
+        backgroundSize: 'cover', backgroundPosition: 'center',
+      }
+    }),
+    // fallback: blurred cover + title text
+    !hasRealSpine && book.coverUrl && React.createElement('div', {
       className: 'book-spine-bg',
       style: { backgroundImage: `url(${book.coverUrl})` }
     }),
-    book.coverUrl && React.createElement('div', { className: 'book-spine-overlay' }),
+    !hasRealSpine && book.coverUrl && React.createElement('div', { className: 'book-spine-overlay' }),
     React.createElement('div', { className: 'book-spine-status-dot', style: { background: statusColor } }),
-    React.createElement('div', {
+    !hasRealSpine && React.createElement('div', {
       className: 'book-spine-title',
       style: { fontSize: fontSize + 'rem' }
     }, book.title)
@@ -5930,14 +5973,16 @@ function Book3DModal({ book, db, onClose, onOpenDetail, onEdit }) {
       ),
       /* spine (left side) — blurred cover like on the shelf */
       React.createElement('div', {
-        className: 'book3d-face book3d-spine',
-        style: book.coverUrl ? {} : { background: `linear-gradient(180deg, ${c.dark}, ${c.light})` }
+        className: 'book3d-face book3d-spine' + (book.spineUrl ? ' has-real-spine' : ''),
+        style: book.spineUrl
+          ? { backgroundImage: `url(${book.spineUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+          : book.coverUrl ? {} : { background: `linear-gradient(180deg, ${c.dark}, ${c.light})` }
       },
-        book.coverUrl && React.createElement('div', {
+        !book.spineUrl && book.coverUrl && React.createElement('div', {
           className: 'book3d-spine-bg',
           style: { backgroundImage: `url(${book.coverUrl})` }
         }),
-        React.createElement('div', { className: 'book3d-spine-title' }, book.title)
+        !book.spineUrl && React.createElement('div', { className: 'book3d-spine-title' }, book.title)
       ),
       /* page edges (right side) */
       React.createElement('div', { className: 'book3d-face book3d-pages-right' }),
