@@ -1818,15 +1818,7 @@
       rgba(0,0,0,0.06) 78%,
       rgba(0,0,0,0.28) 100%);
   }
-  /* head & tail bands (書頭布) */
-  .book3d-spine::before {
-    content: ''; position: absolute; left: 0; right: 0;
-    top: 0; height: 5px; pointer-events: none; z-index: 2;
-    background: repeating-linear-gradient(45deg,
-      #d8c4a0 0px, #d8c4a0 2px,
-      #a88c60 2px, #a88c60 4px);
-    box-shadow: 0 5px 0 -1px rgba(0,0,0,0.25);
-  }
+
   /* right side = page edges */
   .book3d-pages-right {
     top: 2px; bottom: 2px; right: 0;
@@ -2465,18 +2457,59 @@ function BookForm({ book, books = [], onClose, onSave }) {
           )
         ),
         /* spine image */
-        React.createElement('div', { className: 'form-group full' },
-          React.createElement('label', null, '書脊圖片（選填，用於書架顯示）'),
-          React.createElement('div', { className: 'cover-upload' },
-            React.createElement('input', { type: 'file', accept: 'image/*', onChange: handleSpine }),
-            React.createElement('div', { className: 'cover-upload-icon' }, '📕'),
-            React.createElement('div', { className: 'cover-upload-text' }, spinePreview ? '點擊更換書脊' : '上傳書脊照片，書架會直接顯示'),
-            spinePreview && React.createElement('img', {
-              src: spinePreview, alt: '',
-              style: { maxHeight: '140px', width: 'auto', margin: '10px auto 0', display: 'block', borderRadius: '3px' }
-            })
-          )
-        )
+        (() => {
+          // Compute recommended spine aspect ratio from page count + height
+          const PX_PER_CM_H = 9, PX_PER_CM_W = 17;
+          const pg = parseInt(form.pageCount) || 0;
+          const thickCm = pg > 0 ? (pg / 400) * 2 : 1.6;
+          const hMap = { pocket: 15, small: 19, normal: 21, large: 26 };
+          const hCm = parseFloat(form.bookHeight) || hMap[form.bookSize] || 21;
+          const wPx = Math.max(24, Math.round(thickCm * PX_PER_CM_W));
+          const hPx = Math.round(hCm * PX_PER_CM_H);
+          const ratio = (hPx / wPx).toFixed(1);
+          return React.createElement('div', { className: 'form-group full' },
+            React.createElement('label', null, '書脊圖片（選填，用於書架顯示）'),
+            React.createElement('div', {
+              style: {
+                fontSize: '0.76rem', color: 'var(--text2)',
+                background: 'var(--bg2)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)', padding: '8px 10px', marginBottom: '8px',
+                lineHeight: 1.6
+              }
+            },
+              React.createElement('div', null,
+                React.createElement('i', { className: 'ph-duotone ph-ruler', style: { marginRight: '5px' } }),
+                '建議尺寸比例　',
+                React.createElement('strong', { style: { color: 'var(--accent)' } }, `寬 1 : 高 ${ratio}`)
+              ),
+              React.createElement('div', { style: { color: 'var(--text3)', fontSize: '0.72rem' } },
+                `依目前設定（${thickCm.toFixed(1)}cm 厚・${hCm}cm 高）→ 建議畫布 ${wPx * 4} × ${hPx * 4} px`
+              )
+            ),
+            React.createElement('div', { className: 'cover-upload', style: { position: 'relative' } },
+              React.createElement('input', { type: 'file', accept: 'image/*', onChange: handleSpine }),
+              React.createElement('div', { className: 'cover-upload-icon' }, '📕'),
+              React.createElement('div', { className: 'cover-upload-text' }, spinePreview ? '點擊更換書脊' : '上傳書脊照片，書架會直接顯示'),
+              spinePreview && React.createElement('img', {
+                src: spinePreview, alt: '',
+                style: { maxHeight: '140px', width: 'auto', margin: '10px auto 0', display: 'block', borderRadius: '3px' }
+              })
+            ),
+            spinePreview && React.createElement('button', {
+              type: 'button',
+              onClick: () => { setSpinePreview(''); setForm(f => ({ ...f, spineUrl: '' })); },
+              style: {
+                marginTop: '8px', padding: '6px 14px', borderRadius: '14px',
+                background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)',
+                fontSize: '0.78rem', fontFamily: 'inherit', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '5px', margin: '8px auto 0'
+              }
+            },
+              React.createElement('i', { className: 'ph-duotone ph-trash' }),
+              '移除書脊圖片'
+            )
+          );
+        })()
       ),
       React.createElement('div', { className: 'form-actions' },
         book && React.createElement('button', {
@@ -5842,12 +5875,13 @@ function BookSpine({ book, onClick }) {
     onClick: () => onClick(book),
     title: book.title
   },
-    // real spine photo — shown as-is, no blur, no text overlay
+    // real spine photo — full image, never cropped
     hasRealSpine && React.createElement('div', {
       style: {
         position: 'absolute', inset: 0,
         backgroundImage: `url(${book.spineUrl})`,
-        backgroundSize: 'cover', backgroundPosition: 'center',
+        backgroundSize: '100% 100%', backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
       }
     }),
     // fallback: blurred cover + title text
@@ -5856,7 +5890,6 @@ function BookSpine({ book, onClick }) {
       style: { backgroundImage: `url(${book.coverUrl})` }
     }),
     !hasRealSpine && book.coverUrl && React.createElement('div', { className: 'book-spine-overlay' }),
-    React.createElement('div', { className: 'book-spine-status-dot', style: { background: statusColor } }),
     !hasRealSpine && React.createElement('div', {
       className: 'book-spine-title',
       style: { fontSize: fontSize + 'rem' }
@@ -5975,7 +6008,7 @@ function Book3DModal({ book, db, onClose, onOpenDetail, onEdit }) {
       React.createElement('div', {
         className: 'book3d-face book3d-spine' + (book.spineUrl ? ' has-real-spine' : ''),
         style: book.spineUrl
-          ? { backgroundImage: `url(${book.spineUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+          ? { backgroundImage: `url(${book.spineUrl})`, backgroundSize: '100% 100%', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }
           : book.coverUrl ? {} : { background: `linear-gradient(180deg, ${c.dark}, ${c.light})` }
       },
         !book.spineUrl && book.coverUrl && React.createElement('div', {
