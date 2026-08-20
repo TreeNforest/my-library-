@@ -2139,6 +2139,7 @@ function BookForm({ book, books = [], onClose, onSave }) {
     rating:   book?.rating   || 0,
     notes:    book?.notes    || '',
     coverUrl: book?.coverUrl || '',
+    spineUrl: book?.spineUrl || '',
     status:      book?.status      || 'unread',
     purchasePrice: book?.purchasePrice !== undefined ? String(book.purchasePrice) : '',
     purchaseDate:  book?.purchaseDate  || '',
@@ -5820,6 +5821,8 @@ const THEMES = [
 /* ── BookSpine ── */
 function BookSpine({ book, onClick }) {
   const [colors, setColors] = useState(null);
+  const [spineRatio, setSpineRatio] = useState(null); // width / height of uploaded spine image
+
   useEffect(() => {
     let mounted = true;
     if (book.coverUrl) {
@@ -5827,6 +5830,16 @@ function BookSpine({ book, onClick }) {
     }
     return () => { mounted = false; };
   }, [book.coverUrl]);
+
+  // Measure the uploaded spine image so we can match its aspect ratio exactly
+  useEffect(() => {
+    if (!book.spineUrl) { setSpineRatio(null); return; }
+    let mounted = true;
+    const img = new Image();
+    img.onload = () => { if (mounted && img.naturalHeight) setSpineRatio(img.naturalWidth / img.naturalHeight); };
+    img.src = book.spineUrl;
+    return () => { mounted = false; };
+  }, [book.spineUrl]);
 
   // ── Real physical dimensions ──
   // Calibration: 400 pages ≈ 2cm thick
@@ -5841,6 +5854,11 @@ function BookSpine({ book, onClick }) {
   const heightCmMap = { pocket: 15, small: 19, normal: 21, large: 26 };
   const heightCm = parseFloat(book.bookHeight) || heightCmMap[book.bookSize] || 21;
   const height = Math.round(heightCm * PX_PER_CM_H);
+
+  // If a real spine image is uploaded, match its exact aspect ratio so nothing is squashed
+  const finalWidth = (book.spineUrl && spineRatio)
+    ? Math.max(18, Math.round(height * spineRatio))
+    : width;
 
   // Auto-shrink font when title is long
   const titleLen = (book.title || '').length;
@@ -5864,7 +5882,7 @@ function BookSpine({ book, onClick }) {
   return React.createElement('div', {
     className: 'book-spine',
     style: {
-      width: width + 'px',
+      width: finalWidth + 'px',
       height: height + 'px',
       background: hasRealSpine
         ? 'transparent'
@@ -5875,12 +5893,12 @@ function BookSpine({ book, onClick }) {
     onClick: () => onClick(book),
     title: book.title
   },
-    // real spine photo — full image, never cropped
+    // real spine photo — full image, aspect ratio preserved
     hasRealSpine && React.createElement('div', {
       style: {
         position: 'absolute', inset: 0,
         backgroundImage: `url(${book.spineUrl})`,
-        backgroundSize: '100% 100%', backgroundPosition: 'center',
+        backgroundSize: 'contain', backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
       }
     }),
@@ -6008,7 +6026,7 @@ function Book3DModal({ book, db, onClose, onOpenDetail, onEdit }) {
       React.createElement('div', {
         className: 'book3d-face book3d-spine' + (book.spineUrl ? ' has-real-spine' : ''),
         style: book.spineUrl
-          ? { backgroundImage: `url(${book.spineUrl})`, backgroundSize: '100% 100%', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }
+          ? { backgroundImage: `url(${book.spineUrl})`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', backgroundColor: 'rgba(0,0,0,0.15)' }
           : book.coverUrl ? {} : { background: `linear-gradient(180deg, ${c.dark}, ${c.light})` }
       },
         !book.spineUrl && book.coverUrl && React.createElement('div', {
