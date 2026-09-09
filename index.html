@@ -1056,6 +1056,13 @@
     scrollbar-width: none; -webkit-overflow-scrolling: touch;
   }
   .filter-chips::-webkit-scrollbar { display: none; }
+  /* wrapping variant — for rows with many options (e.g. 題材) */
+  .filter-chips-wrap {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    overflow: visible;
+  }
+  .filter-row.multiline { align-items: flex-start; }
+  .filter-row.multiline .filter-row-label { padding-top: 6px; }
   .filter-chip {
     flex-shrink: 0; padding: 5px 12px; border-radius: 16px;
     border: 1px solid var(--border);
@@ -2699,6 +2706,18 @@ function CollForm({ item, onClose, onSave }) {
   const [preview, setPreview] = useState(item?.coverUrl || '');
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
+  // Autocomplete suggestions from existing dramas
+  const uniqSingle = key => [...new Set(dramas.map(d => d[key]?.trim()).filter(Boolean))];
+  const uniqMulti  = key => [...new Set(dramas.flatMap(d =>
+    (d[key] || '').split(/[,，]+/).map(v => v.trim()).filter(Boolean)
+  ))];
+  const typeSuggest     = uniqSingle('type');
+  const platformSuggest = uniqSingle('platform');
+  const genreSuggest    = uniqMulti('genre');
+  const directorSuggest = uniqMulti('director');
+  const writerSuggest   = uniqMulti('writer');
+  const castSuggest     = uniqMulti('cast');
+
   const handleCover = async e => {
     const file = e.target.files[0]; if (!file) return;
     const b64 = await compressImage(file);
@@ -3050,7 +3069,63 @@ function CastNationEditor({ castStr, db }) {
 }
 
 /* ── DramaForm ── */
-function DramaForm({ item, onClose, onSave, db }) {
+/* ── MultiAutocompleteInput — suggests for the last comma-separated token ── */
+function MultiAutocompleteInput({ value, onChange, suggestions, placeholder, className }) {
+  const [show, setShow] = useState(false);
+  const ref = React.useRef(null);
+
+  // Work on the last token after the final comma
+  const parts = value.split(/([,，])/);
+  const lastToken = (value.split(/[,，]/).pop() || '').trim();
+
+  const filtered = lastToken
+    ? [...new Set(suggestions.filter(s =>
+        s && s.toLowerCase().includes(lastToken.toLowerCase()) && s !== lastToken
+      ))].slice(0, 8)
+    : [];
+
+  useEffect(() => {
+    const close = e => { if (ref.current && !ref.current.contains(e.target)) setShow(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
+  const pick = s => {
+    const tokens = value.split(/[,，]/);
+    tokens[tokens.length - 1] = s;
+    onChange(tokens.map(t => t.trim()).filter(Boolean).join(', '));
+    setShow(false);
+  };
+
+  const highlight = text => {
+    const idx = text.toLowerCase().indexOf(lastToken.toLowerCase());
+    if (idx === -1) return text;
+    return React.createElement(React.Fragment, null,
+      text.slice(0, idx),
+      React.createElement('mark', null, text.slice(idx, idx + lastToken.length)),
+      text.slice(idx + lastToken.length)
+    );
+  };
+
+  return React.createElement('div', { className: 'autocomplete-wrap', ref },
+    React.createElement('input', {
+      className: className || 'form-input',
+      value, placeholder,
+      onChange: e => { onChange(e.target.value); setShow(true); },
+      onFocus: () => setShow(true),
+    }),
+    show && filtered.length > 0 && React.createElement('div', { className: 'autocomplete-list' },
+      filtered.map(s =>
+        React.createElement('div', {
+          key: s, className: 'autocomplete-item',
+          onMouseDown: e => { e.preventDefault(); pick(s); }
+        }, highlight(s))
+      )
+    )
+  );
+}
+
+function DramaForm({ item, dramas = [], onClose, onSave, db }) {
   const [form, setForm] = useState({
     title:    item?.title    || '',
     subtitle: item?.subtitle || '',
@@ -3106,11 +3181,11 @@ function DramaForm({ item, onClose, onSave, db }) {
         ),
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '類型'),
-          React.createElement('input', { className: 'form-input', value: form.type, onChange: set('type'), placeholder: '日劇、韓劇、動漫…' })
+          React.createElement(AutocompleteInput, { value: form.type, onChange: v => setForm(f => ({ ...f, type: v })), suggestions: typeSuggest, placeholder: '日劇、韓劇、動漫…' })
         ),
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '題材'),
-          React.createElement('input', { className: 'form-input', value: form.genre, onChange: set('genre'), placeholder: '懸疑, 愛情, 喜劇（逗號分隔）' })
+          React.createElement(MultiAutocompleteInput, { value: form.genre, onChange: v => setForm(f => ({ ...f, genre: v })), suggestions: genreSuggest, placeholder: '懸疑, 愛情, 喜劇（逗號分隔）' })
         ),
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '播出年份'),
@@ -3118,19 +3193,19 @@ function DramaForm({ item, onClose, onSave, db }) {
         ),
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '平台'),
-          React.createElement('input', { className: 'form-input', value: form.platform, onChange: set('platform'), placeholder: 'Netflix、Disney+…' })
+          React.createElement(AutocompleteInput, { value: form.platform, onChange: v => setForm(f => ({ ...f, platform: v })), suggestions: platformSuggest, placeholder: 'Netflix、Disney+…' })
         ),
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '導演／製作公司'),
-          React.createElement('input', { className: 'form-input', value: form.director, onChange: set('director'), placeholder: '多人用「, 」區隔' })
+          React.createElement(MultiAutocompleteInput, { value: form.director, onChange: v => setForm(f => ({ ...f, director: v })), suggestions: directorSuggest, placeholder: '多人用「, 」區隔' })
         ),
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '編劇'),
-          React.createElement('input', { className: 'form-input', value: form.writer, onChange: set('writer'), placeholder: '多人用「, 」區隔' })
+          React.createElement(MultiAutocompleteInput, { value: form.writer, onChange: v => setForm(f => ({ ...f, writer: v })), suggestions: writerSuggest, placeholder: '多人用「, 」區隔' })
         ),
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '演員'),
-          React.createElement('input', { className: 'form-input', value: form.cast, onChange: set('cast'), placeholder: '多人用「, 」區隔' }),
+          React.createElement(MultiAutocompleteInput, { value: form.cast, onChange: v => setForm(f => ({ ...f, cast: v })), suggestions: castSuggest, placeholder: '多人用「, 」區隔' }),
           form.cast.trim() && React.createElement(CastNationEditor, { castStr: form.cast, db })
         ),
         React.createElement('div', { className: 'form-group' },
@@ -3533,7 +3608,17 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
     else { await addDoc(collection(db, 'dramas'), data); showToast('已新增'); }
   };
 
-  const allTypes     = ['all', ...new Set(items.map(i => i.type?.trim()).filter(Boolean))];
+  // Sort types: country groups (韓/台/中/日/美/英/泰...), 劇 before 影 within each
+  const TYPE_ORDER = ['韓劇','韓影','台劇','台影','中劇','中影','日劇','日影','美劇','美影','英劇','英影','泰劇','泰影','動漫'];
+  const rawTypes = [...new Set(items.map(i => i.type?.trim()).filter(Boolean))];
+  const sortedTypes = rawTypes.sort((a, b) => {
+    const ia = TYPE_ORDER.indexOf(a), ib = TYPE_ORDER.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b, 'zh-Hant');
+  });
+  const allTypes     = ['all', ...sortedTypes];
   const allYears     = ['all', ...new Set(items.map(i => i.year ? String(i.year).trim() : '').filter(Boolean)).values()].sort((a,b) => a==='all'?-1:b-a);
   const allPlatforms = ['all', ...new Set(items.map(i => i.platform?.trim()).filter(Boolean))];
   const allGenres    = ['all', ...new Set(items.flatMap(i => (i.genre || '').split(/[,，]+/).map(g => g.trim()).filter(Boolean)))];
@@ -3797,10 +3882,10 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
           )
         )
       ),
-      /* genre row */
-      allGenres.length > 1 && React.createElement('div', { className: 'filter-row' },
+      /* genre row — wraps to multiple lines */
+      allGenres.length > 1 && React.createElement('div', { className: 'filter-row multiline' },
         React.createElement('div', { className: 'filter-row-label' }, '題材'),
-        React.createElement('div', { className: 'filter-chips' },
+        React.createElement('div', { className: 'filter-chips-wrap' },
           allGenres.map(g =>
             React.createElement('button', {
               key: g,
@@ -3843,7 +3928,7 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
       db
     }),
     showForm && React.createElement(DramaForm, {
-      item: editItem, onClose: () => { setShowForm(false); setEditItem(null); },
+      item: editItem, dramas: items, onClose: () => { setShowForm(false); setEditItem(null); },
       onSave: async (data, del) => handleSave(editItem, data, del),
       db
     }),
