@@ -1056,17 +1056,8 @@
     scrollbar-width: none; -webkit-overflow-scrolling: touch;
   }
   .filter-chips::-webkit-scrollbar { display: none; }
-  /* wrapping variant — for rows with many options (e.g. 題材) */
-  .filter-chips-wrap {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-    gap: 6px;
-    overflow: visible;
-  }
-  .filter-chips-wrap .filter-chip {
-    text-align: center; padding: 5px 8px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
+  /* chunked rows — each line holds up to 10 chips and scrolls independently */
+  .filter-chunks { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
   .filter-row.multiline { align-items: flex-start; }
   .filter-row.multiline .filter-row-label { padding-top: 6px; }
   .filter-chip {
@@ -3565,6 +3556,33 @@ function PersonGridItem({ p, role, db, onClick }) {
   );
 }
 
+/* ── FilterRow — chips split into rows of 10, each row scrolls horizontally ── */
+function FilterRow({ label, options, current, onSelect, chipClass }) {
+  const CHUNK = 10;
+  const chunks = [];
+  for (let i = 0; i < options.length; i += CHUNK) chunks.push(options.slice(i, i + CHUNK));
+
+  return React.createElement('div', { className: 'filter-row' + (chunks.length > 1 ? ' multiline' : '') },
+    React.createElement('div', { className: 'filter-row-label' }, label),
+    React.createElement('div', { className: 'filter-chunks' },
+      chunks.map((chunk, ci) =>
+        React.createElement('div', { key: ci, className: 'filter-chips' },
+          chunk.map(o => {
+            const val = typeof o === 'string' ? o : o.value;
+            const lbl = typeof o === 'string' ? (o === 'all' ? '全部' : o) : o.label;
+            const extra = chipClass ? chipClass(val, current) : (current === val ? ' active' : '');
+            return React.createElement('button', {
+              key: val,
+              className: 'filter-chip' + extra,
+              onClick: () => onSelect(val)
+            }, lbl);
+          })
+        )
+      )
+    )
+  );
+}
+
 /* ── DramaPage ── */
 function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
   const [items, setItems]           = useState([]);
@@ -3831,76 +3849,35 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
     /* filter bar */
     React.createElement('div', { className: 'filter-bar' },
       /* status row */
-      React.createElement('div', { className: 'filter-row' },
-        React.createElement('div', { className: 'filter-row-label' }, '狀態'),
-        React.createElement('div', { className: 'filter-chips' },
-          [
-            { value: 'all',       label: '全部' },
-            { value: 'unwatched', label: '🎬 未看' },
-            { value: 'watching',  label: '📺 在看' },
-            { value: 'done',      label: '✅ 看完' },
-            { value: 'dropped',   label: '🚫 棄追' },
-          ].map(s =>
-            React.createElement('button', {
-              key: s.value,
-              className: 'filter-chip' + (statusFilter === s.value ? (s.value === 'all' ? ' active' : ` active-status-${s.value}`) : ''),
-              onClick: () => setStatusFilter(s.value)
-            }, s.label)
-          )
-        )
-      ),
+      React.createElement(FilterRow, {
+        label: '狀態',
+        options: [
+          { value: 'all',       label: '全部' },
+          { value: 'unwatched', label: '🎬 未看' },
+          { value: 'watching',  label: '📺 在看' },
+          { value: 'done',      label: '✅ 看完' },
+          { value: 'dropped',   label: '🚫 棄追' },
+        ],
+        current: statusFilter,
+        onSelect: setStatusFilter,
+        chipClass: (val, cur) => cur === val ? (val === 'all' ? ' active' : ` active-status-${val}`) : ''
+      }),
       /* type row */
-      allTypes.length > 1 && React.createElement('div', { className: 'filter-row' },
-        React.createElement('div', { className: 'filter-row-label' }, '類型'),
-        React.createElement('div', { className: 'filter-chips' },
-          allTypes.map(t =>
-            React.createElement('button', {
-              key: t,
-              className: 'filter-chip' + (typeFilter === t ? ' active' : ''),
-              onClick: () => setTypeFilter(t)
-            }, t === 'all' ? '全部' : t)
-          )
-        )
-      ),
+      allTypes.length > 1 && React.createElement(FilterRow, {
+        label: '類型', options: allTypes, current: typeFilter, onSelect: setTypeFilter
+      }),
       /* year row */
-      allYears.length > 1 && React.createElement('div', { className: 'filter-row' },
-        React.createElement('div', { className: 'filter-row-label' }, '年份'),
-        React.createElement('div', { className: 'filter-chips' },
-          allYears.map(y =>
-            React.createElement('button', {
-              key: y,
-              className: 'filter-chip' + (yearFilter === y ? ' active' : ''),
-              onClick: () => setYearFilter(y)
-            }, y === 'all' ? '全部' : y)
-          )
-        )
-      ),
+      allYears.length > 1 && React.createElement(FilterRow, {
+        label: '年份', options: allYears, current: yearFilter, onSelect: setYearFilter
+      }),
       /* platform row */
-      allPlatforms.length > 1 && React.createElement('div', { className: 'filter-row' },
-        React.createElement('div', { className: 'filter-row-label' }, '平台'),
-        React.createElement('div', { className: 'filter-chips' },
-          allPlatforms.map(p =>
-            React.createElement('button', {
-              key: p,
-              className: 'filter-chip' + (platformFilter === p ? ' active' : ''),
-              onClick: () => setPlatformFilter(p)
-            }, p === 'all' ? '全部' : p)
-          )
-        )
-      ),
-      /* genre row — wraps to multiple lines */
-      allGenres.length > 1 && React.createElement('div', { className: 'filter-row multiline' },
-        React.createElement('div', { className: 'filter-row-label' }, '題材'),
-        React.createElement('div', { className: 'filter-chips-wrap' },
-          allGenres.map(g =>
-            React.createElement('button', {
-              key: g,
-              className: 'filter-chip' + (genreFilter === g ? ' active' : ''),
-              onClick: () => setGenreFilter(g)
-            }, g === 'all' ? '全部' : g)
-          )
-        )
-      )
+      allPlatforms.length > 1 && React.createElement(FilterRow, {
+        label: '平台', options: allPlatforms, current: platformFilter, onSelect: setPlatformFilter
+      }),
+      /* genre row */
+      allGenres.length > 1 && React.createElement(FilterRow, {
+        label: '題材', options: allGenres, current: genreFilter, onSelect: setGenreFilter
+      })
     ),
     loading
       ? React.createElement('div', { className: 'loading' }, React.createElement('div', { className: 'spinner' }), '載入中…')
