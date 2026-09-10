@@ -1058,8 +1058,14 @@
   .filter-chips::-webkit-scrollbar { display: none; }
   /* wrapping variant — for rows with many options (e.g. 題材) */
   .filter-chips-wrap {
-    display: flex; flex-wrap: wrap; gap: 6px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 6px;
     overflow: visible;
+  }
+  .filter-chips-wrap .filter-chip {
+    text-align: center; padding: 5px 8px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .filter-row.multiline { align-items: flex-start; }
   .filter-row.multiline .filter-row-label { padding-top: 6px; }
@@ -2706,18 +2712,6 @@ function CollForm({ item, onClose, onSave }) {
   const [preview, setPreview] = useState(item?.coverUrl || '');
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
-  // Autocomplete suggestions from existing dramas
-  const uniqSingle = key => [...new Set(dramas.map(d => d[key]?.trim()).filter(Boolean))];
-  const uniqMulti  = key => [...new Set(dramas.flatMap(d =>
-    (d[key] || '').split(/[,，]+/).map(v => v.trim()).filter(Boolean)
-  ))];
-  const typeSuggest     = uniqSingle('type');
-  const platformSuggest = uniqSingle('platform');
-  const genreSuggest    = uniqMulti('genre');
-  const directorSuggest = uniqMulti('director');
-  const writerSuggest   = uniqMulti('writer');
-  const castSuggest     = uniqMulti('cast');
-
   const handleCover = async e => {
     const file = e.target.files[0]; if (!file) return;
     const b64 = await compressImage(file);
@@ -3146,6 +3140,18 @@ function DramaForm({ item, dramas = [], onClose, onSave, db }) {
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(item?.coverUrl || '');
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  // Autocomplete suggestions from existing dramas
+  const uniqSingle = key => [...new Set(dramas.map(d => d[key]?.trim()).filter(Boolean))];
+  const uniqMulti  = key => [...new Set(dramas.flatMap(d =>
+    (d[key] || '').split(/[,，]+/).map(v => v.trim()).filter(Boolean)
+  ))];
+  const typeSuggest     = uniqSingle('type');
+  const platformSuggest = uniqSingle('platform');
+  const genreSuggest    = uniqMulti('genre');
+  const directorSuggest = uniqMulti('director');
+  const writerSuggest   = uniqMulti('writer');
+  const castSuggest     = uniqMulti('cast');
 
   const handleCover = async e => {
     const file = e.target.files[0]; if (!file) return;
