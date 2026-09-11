@@ -1056,8 +1056,18 @@
     scrollbar-width: none; -webkit-overflow-scrolling: touch;
   }
   .filter-chips::-webkit-scrollbar { display: none; }
-  /* chunked rows — each line holds up to 10 chips and scrolls independently */
-  .filter-chunks { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  /* chunked rows — all lines scroll together as one horizontal group */
+  .filter-chunks {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; gap: 5px;
+    overflow-x: auto;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .filter-chunks::-webkit-scrollbar { display: none; }
+  .filter-chunks .filter-chips {
+    overflow: visible;
+    width: max-content;
+  }
   .filter-row.multiline { align-items: flex-start; }
   .filter-row.multiline .filter-row-label { padding-top: 6px; }
   .filter-chip {
@@ -5355,8 +5365,10 @@ function DramaLogPage({ dramas, db, showToast }) {
 
 /* ── EVENT_CATS ── */
 const EVENT_CATS = {
-  concert: { label: '演唱會', icon: '🎤' },
-  sports:  { label: '賽事',   icon: '🏆' },
+  concert: { label: '演唱會',   icon: '🎤' },
+  music:   { label: '音樂會',   icon: '🎻' },
+  dance:   { label: '舞蹈表演', icon: '💃' },
+  sports:  { label: '賽事',     icon: '🏆' },
 };
 
 /* ── EventForm ── */
@@ -5665,7 +5677,7 @@ function ProgressPage({ books, dramas, db, showToast }) {
         onClick: () => setTab('dramas')
       },
         React.createElement('i', { className: 'ph-duotone ph-video', style: { marginRight: '4px' } }),
-        '進度'
+        '觀劇進度'
       )
     ),
     tab === 'books'
