@@ -3578,14 +3578,21 @@ function FilterRow({ label, options, current, onSelect, chipClass }) {
       chunks.map((chunk, ci) =>
         React.createElement('div', { key: ci, className: 'filter-chips' },
           chunk.map(o => {
-            const val = typeof o === 'string' ? o : o.value;
-            const lbl = typeof o === 'string' ? (o === 'all' ? '全部' : o) : o.label;
+            const val  = typeof o === 'string' ? o : o.value;
+            const lbl  = typeof o === 'string' ? (o === 'all' ? '全部' : o) : o.label;
+            const icon = typeof o === 'string' ? null : o.icon;
             const extra = chipClass ? chipClass(val, current) : (current === val ? ' active' : '');
             return React.createElement('button', {
               key: val,
               className: 'filter-chip' + extra,
               onClick: () => onSelect(val)
-            }, lbl);
+            },
+              icon && React.createElement('i', {
+                className: `ph-duotone ph-${icon}`,
+                style: { marginRight: '4px', verticalAlign: 'middle' }
+              }),
+              lbl
+            );
           })
         )
       )
@@ -3863,10 +3870,10 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
         label: '狀態',
         options: [
           { value: 'all',       label: '全部' },
-          { value: 'unwatched', label: '🎬 未看' },
-          { value: 'watching',  label: '📺 在看' },
-          { value: 'done',      label: '✅ 看完' },
-          { value: 'dropped',   label: '🚫 棄追' },
+          { value: 'unwatched', label: '未看', icon: 'film-slate' },
+          { value: 'watching',  label: '在看', icon: 'television-simple' },
+          { value: 'done',      label: '看完', icon: 'check-circle' },
+          { value: 'dropped',   label: '棄追', icon: 'prohibit' },
         ],
         current: statusFilter,
         onSelect: setStatusFilter,
