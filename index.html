@@ -379,11 +379,21 @@
     border: 1px solid var(--border);
     border-radius: 16px;
     width: 100%; max-width: 560px;
-    max-height: 90vh; overflow-y: auto;
+    max-height: 90vh;
+    overflow-y: auto; overflow-x: hidden;
     padding: 20px 16px;
     animation: modalIn 0.25s ease;
     transition: background var(--trans), border-color var(--trans);
+    box-sizing: border-box;
   }
+  /* keep every form control inside the modal width */
+  .modal * { box-sizing: border-box; }
+  .modal .form-grid { width: 100%; min-width: 0; }
+  .modal .form-group { min-width: 0; }
+  .modal .form-input,
+  .modal .form-textarea,
+  .modal .form-select { width: 100%; max-width: 100%; min-width: 0; }
+  .modal .autocomplete-wrap { width: 100%; min-width: 0; }
   @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: none; } }
   .modal-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -893,10 +903,12 @@
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .drama-meta { font-size: 0.75rem; color: var(--text3); margin-bottom: 6px; }
   .drama-status-unwatched { background: #e8e4de; color: #7a7068; }
+  .drama-status-wantwatch { background: #ede2ea; color: #8a5a7a; }
   .drama-status-watching  { background: #dde8dd; color: #4a7a4a; }
   .drama-status-done      { background: #dde4ed; color: #4a6080; }
   .drama-status-dropped   { background: #eddde0; color: #8a4a52; }
   [data-theme="dark"] .drama-status-unwatched { background: #3a3630; color: #a89e92; }
+  [data-theme="dark"] .drama-status-wantwatch { background: #3a2e38; color: #c090b0; }
   [data-theme="dark"] .drama-status-watching  { background: #2d3d2d; color: #7aaa7a; }
   [data-theme="dark"] .drama-status-done      { background: #2a3040; color: #7a9aaa; }
   [data-theme="dark"] .drama-status-dropped   { background: #3d2a2e; color: #aa7a82; }
@@ -1081,6 +1093,7 @@
   .filter-chip:hover { border-color: var(--accent); color: var(--text); }
   .filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
   .filter-chip.active-status-unwatched { background: #e8e4de; border-color: #c8b8a8; color: #7a7068; }
+  .filter-chip.active-status-wantwatch { background: #a86a90; border-color: #a86a90; color: #fff; }
   .filter-chip.active-status-watching  { background: #4a8c6a; border-color: #4a8c6a; color: #fff; }
   .filter-chip.active-status-done      { background: #4a6080; border-color: #4a6080; color: #fff; }
   .filter-chip.active-status-dropped   { background: #8a4a52; border-color: #8a4a52; color: #fff; }
@@ -2915,6 +2928,7 @@ function Lightbox({ src, onClose }) {
 /* ── DramaStatusBadge ── */
 const DRAMA_STATUS = {
   unwatched: { label: '未看', cls: 'drama-status-unwatched', icon: 'video' },
+  wantwatch: { label: '想看', cls: 'drama-status-wantwatch', icon: 'list-heart' },
   watching:  { label: '在看', cls: 'drama-status-watching',  icon: 'television-simple' },
   done:      { label: '看完', cls: 'drama-status-done',      icon: 'check-circle' },
   dropped:   { label: '棄追', cls: 'drama-status-dropped',   icon: 'prohibit' },
@@ -3871,6 +3885,7 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
         options: [
           { value: 'all',       label: '全部' },
           { value: 'unwatched', label: '未看', icon: 'film-slate' },
+          { value: 'wantwatch', label: '想看', icon: 'list-heart' },
           { value: 'watching',  label: '在看', icon: 'television-simple' },
           { value: 'done',      label: '看完', icon: 'check-circle' },
           { value: 'dropped',   label: '棄追', icon: 'prohibit' },
