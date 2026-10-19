@@ -913,6 +913,63 @@
   [data-theme="dark"] .drama-status-done      { background: #2a3040; color: #7a9aaa; }
   [data-theme="dark"] .drama-status-dropped   { background: #3d2a2e; color: #aa7a82; }
   [data-theme="night"] .drama-status-watching { background: #2d3d2d; color: #7aaa7a; }
+
+  /* ── Drama poster view (Netflix-style rows) ── */
+  .poster-view { animation: fadeIn 0.4s ease; }
+  .poster-row { margin-bottom: 26px; }
+  .poster-row-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+  .poster-row-title { margin: 0; font-size: 1.15rem; font-weight: 500; color: var(--text); letter-spacing: 0.02em; }
+  .poster-row-count { font-size: 0.75rem; color: var(--text3); }
+  .poster-scroller {
+    display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden;
+    margin: 0 -24px; padding: 4px 24px 8px; scroll-padding: 0 24px;
+    scroll-snap-type: x proximity; overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .poster-scroller::-webkit-scrollbar { display: none; }
+  .poster-card {
+    flex: 0 0 auto; width: 112px; aspect-ratio: 2/3; position: relative;
+    border: none; padding: 0; border-radius: 6px; overflow: hidden; cursor: pointer;
+    background: linear-gradient(160deg, var(--bg3), var(--bg2));
+    scroll-snap-align: start; transition: transform 0.2s ease;
+    box-shadow: 0 2px 8px var(--shadow);
+  }
+  .poster-card.lg { width: 46vw; max-width: 200px; border-radius: 8px; }
+  @media (min-width: 601px) {
+    .poster-card { width: 140px; }
+    .poster-card.lg { width: 210px; max-width: none; }
+  }
+  .poster-card:active { transform: scale(0.96); }
+  @media (hover: hover) { .poster-card:hover { transform: scale(1.04); } }
+  .poster-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .poster-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .poster-ph {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 6px; padding: 10px;
+    color: var(--text2); text-align: center; font-size: 0.82rem; line-height: 1.35;
+  }
+  .poster-ph i { font-size: 1.8rem; color: var(--text3); }
+  .poster-ribbon {
+    position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+    background: var(--accent); color: #fff; font-size: 0.68rem; font-weight: 600;
+    padding: 3px 9px; border-radius: 4px 4px 0 0; white-space: nowrap;
+  }
+  .poster-score {
+    position: absolute; top: 6px; right: 6px; padding: 2px 7px; border-radius: 10px;
+    background: rgba(0,0,0,0.55); color: #ffd98a; font-size: 0.7rem;
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  }
+  .poster-caption {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 36px 10px 12px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.82));
+    color: #fff; text-align: left;
+  }
+  .poster-caption-title { font-size: 0.9rem; font-weight: 500; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .poster-caption-sub { font-size: 0.72rem; opacity: 0.8; margin-top: 2px; }
+  .poster-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,0.3); }
+  .poster-progress-fill { height: 100%; background: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { .poster-card { transition: none; } .poster-view { animation: none; } }
   .drama-list { display: flex; flex-direction: column; gap: 10px; animation: fadeIn 0.4s ease; }
   .drama-list-item {
     background: var(--surface); border: 1px solid var(--border);
@@ -3627,7 +3684,8 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
   const [yearFilter, setYearFilter]       = useState('all');
   const [platformFilter, setPlatformFilter] = useState('all');
   const [genreFilter, setGenreFilter]       = useState('all');
-  const [view, setView]             = useState('list');
+  const [view, setView]             = useState(() => { try { return localStorage.getItem('dramaViewMode') || 'list'; } catch { return 'list'; } });
+  useEffect(() => { try { localStorage.setItem('dramaViewMode', view); } catch {} }, [view]);
   const [dramaView, setDramaView]   = useState('dramas'); // 'dramas' | 'people'
   const [peopleTab, setPeopleTab]   = useState('cast'); // 'director' | 'writer' | 'cast'
   const [peopleSearch, setPeopleSearch] = useState('');
@@ -3734,6 +3792,64 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
   const avgRating = items.filter(i => i.rating > 0).length
     ? (items.reduce((s, i) => s + (i.rating || 0), 0) / items.filter(i => i.rating > 0).length).toFixed(1) : '—';
 
+  /* ── Poster (Netflix-style) rows ── */
+  const posterRows = (() => {
+    const rows = [];
+    const add = (key, title, list, opts = {}) => { if (list.length) rows.push({ key, title, items: list, ...opts }); };
+    add('watching', '繼續觀看', filtered.filter(i => i.status === 'watching'), { size: 'lg', mode: 'progress' });
+    add('recent', '最近新增', filtered.slice(0, 20));
+    add('want', '我的想看清單', filtered.filter(i => i.status === 'wantwatch'));
+    add('top', '高分珍藏', filtered.filter(i => (i.rating || 0) >= 4).sort((a, b) => (b.rating || 0) - (a.rating || 0)), { size: 'lg', mode: 'score' });
+    sortedTypes.forEach(t => add('type-' + t, t, filtered.filter(i => i.type?.trim() === t)));
+    add('done', '已看完', filtered.filter(i => i.status === 'done'));
+    return rows;
+  })();
+
+  const PosterCard = ({ item, size, mode }) => {
+    const eps = parseInt(item.eps) || 0, totalEps = parseInt(item.totalEps) || 0;
+    const pct = totalEps ? Math.min(100, Math.round(eps / totalEps * 100)) : 0;
+    const showCaption = size === 'lg';
+    return React.createElement('button', {
+      className: 'poster-card' + (size === 'lg' ? ' lg' : ''),
+      onClick: () => setDetailItem(item),
+      title: item.title, 'aria-label': item.title
+    },
+      item.coverUrl
+        ? React.createElement('img', { src: item.coverUrl, alt: '', loading: 'lazy' })
+        : React.createElement('div', { className: 'poster-ph' },
+            React.createElement('i', { className: 'ph-duotone ph-film-slate' }),
+            !showCaption && item.title
+          ),
+      mode === 'score' && item.rating > 0 && React.createElement('div', { className: 'poster-score' }, '★ ' + item.rating),
+      showCaption
+        ? React.createElement('div', { className: 'poster-caption' },
+            React.createElement('div', { className: 'poster-caption-title' }, item.title),
+            mode === 'progress'
+              ? (eps > 0 || totalEps > 0) && React.createElement('div', { className: 'poster-caption-sub' },
+                  totalEps ? `看到第 ${eps} 集・共 ${totalEps} 集` : `看到第 ${eps} 集`)
+              : React.createElement('div', { className: 'poster-caption-sub' }, [item.type, item.year].filter(Boolean).join('・'))
+          )
+        : item.status === 'watching' && React.createElement('div', { className: 'poster-ribbon' }, '追劇中'),
+      mode === 'progress' && totalEps > 0 && React.createElement('div', { className: 'poster-progress' },
+        React.createElement('div', { className: 'poster-progress-fill', style: { width: pct + '%' } })
+      )
+    );
+  };
+
+  const renderPosterRows = () => React.createElement('div', { className: 'poster-view' },
+    posterRows.map(row =>
+      React.createElement('section', { key: row.key, className: 'poster-row' },
+        React.createElement('div', { className: 'poster-row-head' },
+          React.createElement('h3', { className: 'poster-row-title' }, row.title),
+          React.createElement('span', { className: 'poster-row-count' }, row.items.length + ' 部')
+        ),
+        React.createElement('div', { className: 'poster-scroller' },
+          row.items.map(i => React.createElement(PosterCard, { key: row.key + i.id, item: i, size: row.size, mode: row.mode }))
+        )
+      )
+    )
+  );
+
   const DramaCardGrid = ({ item }) =>
     React.createElement('div', { className: 'drama-card', onClick: () => setDetailItem(item) },
       React.createElement('div', { className: 'drama-cover' },
@@ -3781,7 +3897,7 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
         }, `演員 (${castList.length})`)
       ),
       React.createElement('div', { className: 'view-toggle' },
-        React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
+        React.createElement('button', { className: `view-btn${view!=='list'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
         React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' }))
       )
     ),
@@ -3824,7 +3940,7 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
           React.createElement('div', { className: 'empty-title' }, '還沒有資料'),
           React.createElement('div', { className: 'empty-desc' }, '在劇集中填入' + (peopleTab === 'director' ? '導演' : '演員') + '名稱就會出現這裡')
         )
-      : view === 'grid'
+      : view !== 'list'
         ? React.createElement('div', { className: 'author-grid' },
             peopleList.map(p =>
               React.createElement(PersonGridItem, {
@@ -3846,7 +3962,7 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
             )
           ),
     React.createElement('div', { style: { display: 'flex', gap: '4px', margin: '16px 0', justifyContent: 'flex-end' } },
-      React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
+      React.createElement('button', { className: `view-btn${view!=='list'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
       React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' }))
     )
   );
@@ -3873,6 +3989,7 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
         React.createElement('input', { type: 'text', placeholder: '搜尋劇名、類型或平台…', value: search, onChange: e => setSearch(e.target.value) })
       ),
       React.createElement('div', { className: 'view-toggle' },
+        React.createElement('button', { className: `view-btn${view==='poster'?' active':''}`, onClick: () => setView('poster'), title: '海報' }, React.createElement('i', { className: 'ph-duotone ph-film-strip' })),
         React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
         React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' }))
       )
@@ -3919,6 +4036,8 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
             React.createElement('div', { className: 'empty-title' }, items.length === 0 ? '還沒有觀劇紀錄' : '找不到符合的劇集'),
             React.createElement('div', { className: 'empty-desc' }, items.length === 0 ? '點擊右上角「新增劇集」開始紀錄' : '試試其他關鍵字')
           )
+        : view === 'poster'
+          ? renderPosterRows()
         : view === 'grid'
           ? React.createElement('div', { className: 'drama-grid' }, filtered.map(i => React.createElement(DramaCardGrid, { key: i.id, item: i })))
           : React.createElement('div', { className: 'drama-list' }, filtered.map(i => React.createElement(DramaListItem, { key: i.id, item: i })))
