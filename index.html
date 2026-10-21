@@ -1529,6 +1529,37 @@
   .theme-grid-swatch { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
   .theme-category-sep { grid-column: 1/-1; font-size: 0.7rem; color: var(--text3); letter-spacing: 0.06em; margin: 4px 0 2px; }
 
+  /* ── Settings: nav order & default views ── */
+  .settings-hint { font-size: 0.75rem; color: var(--text3); margin: -6px 0 12px; line-height: 1.5; }
+  .nav-order-list { display: flex; flex-direction: column; gap: 6px; }
+  .nav-order-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 8px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg2);
+    font-size: 0.88rem; color: var(--text);
+  }
+  .nav-order-row.is-start { border-color: var(--accent); }
+  .nav-order-label { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .nav-order-label i { font-size: 1.05rem; color: var(--text2); }
+  .nav-order-btn {
+    width: 32px; height: 32px; border-radius: 8px; border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    color: var(--text2); font-size: 1rem;
+  }
+  .nav-order-btn:hover:not(:disabled) { background: var(--bg3); color: var(--text); }
+  .nav-order-btn:disabled { opacity: 0.25; cursor: default; }
+  .nav-order-btn.home.active { color: var(--accent); }
+  .nav-order-btn:focus-visible, .pref-seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .pref-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .pref-row:last-child { margin-bottom: 0; }
+  .pref-row-label { font-size: 0.85rem; color: var(--text2); white-space: nowrap; }
+  .pref-seg { display: flex; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 2px; }
+  .pref-seg-btn {
+    border: none; background: transparent; color: var(--text2); cursor: pointer;
+    padding: 6px 10px; border-radius: 8px; font-size: 0.78rem; font-family: inherit;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .pref-seg-btn.active { background: var(--surface); color: var(--accent); box-shadow: 0 1px 3px var(--shadow); font-weight: 500; }
+
   /* ── Streak ── */
   .streak-section { margin-bottom: 24px; }
   .streak-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
@@ -2015,7 +2046,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { initializeApp } from 'firebase/app';
 import {
-  getFirestore, collection, addDoc, updateDoc, deleteDoc,
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collectionGroup,
+  collection, addDoc, updateDoc, deleteDoc,
   doc, onSnapshot, serverTimestamp, query, orderBy, getDoc, setDoc, getDocs
 } from 'firebase/firestore';
 
@@ -2031,7 +2063,10 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
+// 本機快取：第一次之後會先從手機讀資料，再於背景同步變動
+const db  = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
 const COLL = 'books';
 
 /* ── Helpers ── */
@@ -3672,9 +3707,7 @@ function FilterRow({ label, options, current, onSelect, chipClass }) {
 }
 
 /* ── DramaPage ── */
-function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
-  const [items, setItems]           = useState([]);
-  const [loading, setLoading]       = useState(true);
+function DramaPage({ db, showToast, externalShowForm, onExternalFormClose, dramas: items = [], dramasLoading: loading }) {
   const [showForm, setShowForm]     = useState(false);
   const [editItem, setEditItem]     = useState(null);
   const [detailItem, setDetailItem] = useState(null);
@@ -3684,8 +3717,7 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
   const [yearFilter, setYearFilter]       = useState('all');
   const [platformFilter, setPlatformFilter] = useState('all');
   const [genreFilter, setGenreFilter]       = useState('all');
-  const [view, setView]             = useState(() => { try { return localStorage.getItem('dramaViewMode') || 'list'; } catch { return 'list'; } });
-  useEffect(() => { try { localStorage.setItem('dramaViewMode', view); } catch {} }, [view]);
+  const [view, setView]             = useState(() => readPref('dramaDefaultView', 'list'));
   const [dramaView, setDramaView]   = useState('dramas'); // 'dramas' | 'people'
   const [peopleTab, setPeopleTab]   = useState('cast'); // 'director' | 'writer' | 'cast'
   const [peopleSearch, setPeopleSearch] = useState('');
@@ -3703,15 +3735,6 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose }) {
       snap.docs.forEach(d => { map[d.id] = d.data(); });
       setPeopleData(map);
     }, () => {});
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    const q = query(collection(db, 'dramas'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, snap => {
-      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    }, () => setLoading(false));
     return unsub;
   }, []);
 
@@ -4830,6 +4853,45 @@ function WishlistPage({ db, showToast, books, externalShowForm, onExternalFormCl
 }
 
 /* ── AchievementsPage ── */
+/* ── 一次讀取所有閱讀／觀劇紀錄 ──
+   優先用 collectionGroup 一條連線抓全部；若被安全規則擋下，
+   自動退回「每本書／每部劇各一條」的舊方式。 */
+function useAllLogs({ books = [], dramas = [] }) {
+  const [logs, setLogs] = useState([]);
+  const [fallback, setFallback] = useState(false);
+  const bookIds  = books.map(b => b.id).join(',');
+  const dramaIds = dramas.map(d => d.id).join(',');
+
+  useEffect(() => {
+    if (fallback) return;
+    const unsub = onSnapshot(collectionGroup(db, 'logs'), snap => {
+      setLogs(snap.docs.map(d => {
+        const parent = d.ref.parent.parent;
+        return { ...d.data(), id: d.id, parentId: parent?.id, kind: parent?.parent?.id };
+      }).filter(l => l.kind === 'books' || l.kind === 'dramas'));
+    }, err => { console.warn('collectionGroup 無法使用，改用逐筆讀取', err); setFallback(true); });
+    return unsub;
+  }, [fallback]);
+
+  useEffect(() => {
+    if (!fallback) return;
+    const per = {};
+    const targets = [
+      ...(bookIds  ? bookIds.split(',').map(id => ['books', id])   : []),
+      ...(dramaIds ? dramaIds.split(',').map(id => ['dramas', id]) : []),
+    ];
+    const unsubs = targets.map(([kind, id]) =>
+      onSnapshot(collection(db, kind, id, 'logs'), snap => {
+        per[kind + '/' + id] = snap.docs.map(d => ({ ...d.data(), id: d.id, parentId: id, kind }));
+        setLogs(Object.values(per).flat());
+      })
+    );
+    return () => unsubs.forEach(u => u());
+  }, [fallback, bookIds, dramaIds]);
+
+  return logs;
+}
+
 function AchievementsPage({ books, dramas, db, showToast }) {
   const [customAchs, setCustomAchs] = useState([]);
   const [showCustomForm, setShowCustomForm] = useState(false);
@@ -4845,32 +4907,11 @@ function AchievementsPage({ books, dramas, db, showToast }) {
   }, []);
 
   // ── Load all logs for streak calculation ──
-  const [bookLogDates, setBookLogDates]   = useState(new Set());
-  const [dramaLogDates, setDramaLogDates] = useState(new Set());
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear,  setCalYear]  = useState(new Date().getFullYear());
-
-  useEffect(() => {
-    if (!books.length) return;
-    const unsubs = books.map(b =>
-      onSnapshot(collection(db, 'books', b.id, 'logs'), snap => {
-        const dates = snap.docs.map(d => d.data().date).filter(Boolean);
-        setBookLogDates(prev => new Set([...prev, ...dates]));
-      })
-    );
-    return () => unsubs.forEach(u => u());
-  }, [books]);
-
-  useEffect(() => {
-    if (!dramas.length) return;
-    const unsubs = dramas.map(d =>
-      onSnapshot(collection(db, 'dramas', d.id, 'logs'), snap => {
-        const dates = snap.docs.map(doc => doc.data().date).filter(Boolean);
-        setDramaLogDates(prev => new Set([...prev, ...dates]));
-      })
-    );
-    return () => unsubs.forEach(u => u());
-  }, [dramas]);
+  const allLogs = useAllLogs({ books, dramas });
+  const bookLogDates  = new Set(allLogs.filter(l => l.kind === 'books'  && l.date).map(l => l.date));
+  const dramaLogDates = new Set(allLogs.filter(l => l.kind === 'dramas' && l.date).map(l => l.date));
 
   // Streak calc
   const calcStreak = dates => {
@@ -5157,27 +5198,16 @@ function DramaCalendar({ dramas, db }) {
   const today = new Date();
   const [curYear,  setCurYear]  = useState(today.getFullYear());
   const [curMonth, setCurMonth] = useState(today.getMonth());
-  const [allLogs,  setAllLogs]  = useState([]);
   const [selDate,  setSelDate]  = useState(null);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(today.getFullYear());
 
-  useEffect(() => {
-    if (!dramas.length) return;
-    const unsubs = dramas.map(d =>
-      onSnapshot(
-        query(collection(db, 'dramas', d.id, 'logs'), orderBy('date', 'desc')),
-        snap => {
-          const entries = snap.docs.map(doc => ({
-            ...doc.data(), id: doc.id,
-            dramaId: d.id, dramaTitle: d.title, dramaCover: d.coverUrl
-          }));
-          setAllLogs(prev => [...prev.filter(l => l.dramaId !== d.id), ...entries]);
-        }
-      )
-    );
-    return () => unsubs.forEach(u => u());
-  }, [dramas]);
+  const rawLogs = useAllLogs({ dramas });
+  const dramaById = Object.fromEntries(dramas.map(d => [d.id, d]));
+  const allLogs = rawLogs
+    .filter(l => l.kind === 'dramas' && dramaById[l.parentId])
+    .map(l => ({ ...l, dramaId: l.parentId, dramaTitle: dramaById[l.parentId].title, dramaCover: dramaById[l.parentId].coverUrl }))
+    .sort((x, y) => String(y.date || '').localeCompare(String(x.date || '')));
 
   const prevMonth = () => { if (curMonth === 0) { setCurYear(y=>y-1); setCurMonth(11); } else setCurMonth(m=>m-1); setSelDate(null); };
   const nextMonth = () => { if (curMonth === 11) { setCurYear(y=>y+1); setCurMonth(0); } else setCurMonth(m=>m+1); setSelDate(null); };
@@ -6404,11 +6434,32 @@ function BookshelfView({ books, db, onOpenDetail, onEdit }) {
   );
 }
 
+/* ── Navigation pages & user prefs ── */
+const NAV_PAGES = [
+  { id: 'shelf',        label: '書架',    icon: 'books' },
+  { id: 'progress',     label: '進度',    icon: 'chart-bar' },
+  { id: 'collection',   label: '觀劇',    icon: 'video' },
+  { id: 'events',       label: '演出紀錄', icon: 'ticket' },
+  { id: 'achievements', label: '成就',    icon: 'medal' },
+  { id: 'borrow',       label: '借閱',    icon: 'book-bookmark' },
+];
+const readPref = (key, fallback) => { try { return localStorage.getItem(key) || fallback; } catch { return fallback; } };
+const writePref = (key, val) => { try { localStorage.setItem(key, val); } catch {} };
+const loadNavOrder = () => {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem('navOrder') || '[]'); } catch {}
+  const ids = NAV_PAGES.map(p => p.id);
+  const kept = (Array.isArray(saved) ? saved : []).filter(id => ids.includes(id));
+  return [...kept, ...ids.filter(id => !kept.includes(id))];
+};
+
 function App() {
   const [books,   setBooks]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [theme,   setTheme]   = useState(() => localStorage.getItem('theme') || 'light');
-  const [view,    setView]    = useState('grid');
+  const [bookDefaultView, setBookDefaultView] = useState(() => readPref('bookDefaultView', 'grid'));
+  const [dramaDefaultView, setDramaDefaultView] = useState(() => readPref('dramaDefaultView', 'list'));
+  const [view,    setView]    = useState(() => readPref('bookDefaultView', 'grid'));
   const [search,  setSearch]  = useState('');
   const [catFilter, setCatFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -6416,7 +6467,18 @@ function App() {
   const [editBook,   setEditBook]   = useState(null);
   const [detailBook, setDetailBook] = useState(null);
   const [authorPage, setAuthorPage] = useState(null);
-  const [page, setPage] = useState('shelf');
+  const [startPage, setStartPage] = useState(() => { const p = readPref('startPage', 'shelf'); return NAV_PAGES.some(n => n.id === p) ? p : 'shelf'; });
+  const [page, setPage] = useState(startPage);
+  const [navOrder, setNavOrder] = useState(loadNavOrder);
+  useEffect(() => { writePref('navOrder', JSON.stringify(navOrder)); }, [navOrder]);
+  useEffect(() => { writePref('startPage', startPage); }, [startPage]);
+  useEffect(() => { writePref('bookDefaultView', bookDefaultView); }, [bookDefaultView]);
+  useEffect(() => { writePref('dramaDefaultView', dramaDefaultView); }, [dramaDefaultView]);
+  const moveNav = (idx, dir) => setNavOrder(o => {
+    const j = idx + dir; if (j < 0 || j >= o.length) return o;
+    const n = [...o]; [n[idx], n[j]] = [n[j], n[idx]]; return n;
+  });
+  const navPagesOrdered = navOrder.map(id => NAV_PAGES.find(p => p.id === id));
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fontSize, setFontSize] = useState(() => localStorage.getItem('fontSize') || 'sm');
@@ -6467,9 +6529,13 @@ function App() {
 
   /* firestore listener - dramas */
   const [items, setItems] = useState([]);
+  const [dramasLoading, setDramasLoading] = useState(true);
   useEffect(() => {
     const q = query(collection(db, 'dramas'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsub = onSnapshot(q, snap => {
+      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setDramasLoading(false);
+    }, err => { console.error(err); setDramasLoading(false); });
     return unsub;
   }, []);
 
@@ -6569,19 +6635,12 @@ function App() {
               className: 'nav-dropdown-btn',
               onClick: e => { e.stopPropagation(); setShowNavMenu(v => !v); }
             },
-              React.createElement('i', { className: `ph-duotone ph-${{ shelf:'books', progress:'chart-bar', collection:'video', events:'ticket', achievements:'medal', borrow:'book-bookmark' }[page] || 'books'}`, style: { fontSize: '1rem', marginRight: '4px' } }),
-              { shelf:'書架', progress:'進度', collection:'觀劇', events:'演出紀錄', achievements:'成就', borrow:'借閱' }[page] || '書架',
+              React.createElement('i', { className: `ph-duotone ph-${(NAV_PAGES.find(p => p.id === page) || NAV_PAGES[0]).icon}`, style: { fontSize: '1rem', marginRight: '4px' } }),
+              (NAV_PAGES.find(p => p.id === page) || NAV_PAGES[0]).label,
               React.createElement('span', { className: 'nav-dropdown-arrow' + (showNavMenu ? ' open' : '') }, '▼')
             ),
             showNavMenu && React.createElement('div', { className: 'nav-dropdown-menu' },
-              [
-                { id: 'shelf',        label: '書架',    icon: 'books' },
-                { id: 'progress',     label: '進度',    icon: 'chart-bar' },
-                { id: 'collection',   label: '觀劇',    icon: 'video' },
-                { id: 'events',       label: '演出紀錄', icon: 'ticket' },
-                { id: 'achievements', label: '成就',    icon: 'medal' },
-                { id: 'borrow',       label: '借閱',    icon: 'book-bookmark' },
-              ].map(p =>
+              navPagesOrdered.map(p =>
                 React.createElement('button', {
                   key: p.id,
                   className: 'nav-dropdown-item' + (page === p.id ? ' active' : ''),
@@ -6606,7 +6665,7 @@ function App() {
     /* main */
     React.createElement('main', { className: 'main' },
       page === 'collection'
-        ? React.createElement(DramaPage, { db, showToast, externalShowForm: collShowForm, onExternalFormClose: () => setCollShowForm(false) })
+        ? React.createElement(DramaPage, { db, showToast, dramas: items, dramasLoading, externalShowForm: collShowForm, onExternalFormClose: () => setCollShowForm(false) })
         : page === 'events'
         ? React.createElement(EventsPage, { db, showToast, externalShowForm: eventsShowForm, onExternalFormClose: () => setEventsShowForm(false) })
         : page === 'achievements'
@@ -6820,6 +6879,54 @@ function App() {
                 React.createElement('span', { className: 'fontsize-preview', style: { fontSize: f.size } }, '文'),
                 React.createElement('span', { style: { fontSize: '0.7rem' } }, f.label)
               )
+            )
+          )
+        ),
+        /* Nav order & start page */
+        React.createElement('div', { className: 'settings-section' },
+          React.createElement('div', { className: 'settings-section-title' }, '分頁順序與首頁'),
+          React.createElement('div', { className: 'settings-hint' }, '用箭頭調整選單順序，點小房子設定開啟 app 時顯示的頁面。'),
+          React.createElement('div', { className: 'nav-order-list' },
+            navPagesOrdered.map((p, idx) =>
+              React.createElement('div', { key: p.id, className: 'nav-order-row' + (startPage === p.id ? ' is-start' : '') },
+                React.createElement('button', {
+                  className: 'nav-order-btn home' + (startPage === p.id ? ' active' : ''),
+                  onClick: () => setStartPage(p.id),
+                  title: '設為首頁', 'aria-label': '把' + p.label + '設為首頁', 'aria-pressed': startPage === p.id
+                }, React.createElement('i', { className: (startPage === p.id ? 'ph-fill' : 'ph-duotone') + ' ph-house' })),
+                React.createElement('span', { className: 'nav-order-label' },
+                  React.createElement('i', { className: 'ph-duotone ph-' + p.icon }), p.label
+                ),
+                React.createElement('button', { className: 'nav-order-btn', disabled: idx === 0, onClick: () => moveNav(idx, -1), 'aria-label': p.label + '往上移' },
+                  React.createElement('i', { className: 'ph-duotone ph-caret-up' })),
+                React.createElement('button', { className: 'nav-order-btn', disabled: idx === navPagesOrdered.length - 1, onClick: () => moveNav(idx, 1), 'aria-label': p.label + '往下移' },
+                  React.createElement('i', { className: 'ph-duotone ph-caret-down' }))
+              )
+            )
+          )
+        ),
+        /* Default views */
+        React.createElement('div', { className: 'settings-section' },
+          React.createElement('div', { className: 'settings-section-title' }, '預設檢視'),
+          React.createElement('div', { className: 'settings-hint' }, '開啟頁面時先用這個檢視，之後還是可以隨時切換。'),
+          React.createElement('div', { className: 'pref-row' },
+            React.createElement('span', { className: 'pref-row-label' }, '書籍'),
+            React.createElement('div', { className: 'pref-seg', role: 'radiogroup', 'aria-label': '書籍預設檢視' },
+              [{ id: 'grid', label: '格狀', icon: 'grid-four' }, { id: 'list', label: '清單', icon: 'list' }, { id: 'shelf', label: '書背', icon: 'books' }].map(o => React.createElement('button', {
+                key: o.id, role: 'radio', 'aria-checked': bookDefaultView === o.id,
+                className: 'pref-seg-btn' + (bookDefaultView === o.id ? ' active' : ''),
+                onClick: () => { setBookDefaultView(o.id); setView(o.id); }
+              }, React.createElement('i', { className: 'ph-duotone ph-' + o.icon }), o.label))
+            )
+          ),
+          React.createElement('div', { className: 'pref-row' },
+            React.createElement('span', { className: 'pref-row-label' }, '觀劇'),
+            React.createElement('div', { className: 'pref-seg', role: 'radiogroup', 'aria-label': '觀劇預設檢視' },
+              [{ id: 'poster', label: '海報', icon: 'film-strip' }, { id: 'grid', label: '格狀', icon: 'grid-four' }, { id: 'list', label: '清單', icon: 'list' }].map(o => React.createElement('button', {
+                key: o.id, role: 'radio', 'aria-checked': dramaDefaultView === o.id,
+                className: 'pref-seg-btn' + (dramaDefaultView === o.id ? ' active' : ''),
+                onClick: () => setDramaDefaultView(o.id)
+              }, React.createElement('i', { className: 'ph-duotone ph-' + o.icon }), o.label))
             )
           )
         )
