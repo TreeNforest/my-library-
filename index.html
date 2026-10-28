@@ -948,6 +948,22 @@
   .album-empty i { font-size: 1.6rem; display: block; margin-bottom: 4px; }
   .album-more { margin-top: 8px; width: 100%; }
 
+  .album-thumb-gif {
+    position: absolute; right: 4px; top: 4px; padding: 0 5px; border-radius: 4px;
+    background: rgba(0,0,0,0.55); color: #fff; font-size: 0.6rem; font-weight: 600; letter-spacing: 0.05em;
+  }
+  .album-thumb.sorting { transition: transform 0.15s ease, opacity 0.15s ease; }
+  .album-thumb.sorting img { opacity: 0.85; }
+  .album-thumb.picked { transform: scale(0.92); outline: 3px solid var(--accent); outline-offset: 2px; }
+  .album-thumb.picked img { opacity: 1; }
+  .album-thumb-num {
+    position: absolute; left: 4px; top: 4px; min-width: 22px; height: 22px; padding: 0 5px;
+    border-radius: 11px; background: var(--accent); color: #fff; font-size: 0.72rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .album-sort-hint { font-size: 0.78rem; color: var(--text3); margin-bottom: 10px; line-height: 1.5; }
+  .album-sort-bar { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .album-head button.album-add { font-family: inherit; }
   .album-sheet-previews { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; }
   .album-sheet-previews img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; flex: 0 0 auto; }
   .album-tag-pick { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -2113,7 +2129,7 @@ import { createRoot } from 'react-dom/client';
 import { initializeApp } from 'firebase/app';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collectionGroup,
-  collection, addDoc, updateDoc, deleteDoc,
+  collection, addDoc, writeBatch, updateDoc, deleteDoc,
   doc, onSnapshot, serverTimestamp, query, orderBy, getDoc, setDoc, getDocs
 } from 'firebase/firestore';
 
@@ -3446,32 +3462,98 @@ function DramaForm({ item, dramas = [], onClose, onSave, db }) {
    dramas/{id}/photoFull ：大圖，用同一個 id，點開時才讀 */
 const ALBUM_TAGS = ['劇照', '花絮', '截圖'];
 
-const resizeImage = (file, maxSide, quality) => new Promise((res, rej) => {
-  const reader = new FileReader();
-  reader.onerror = rej;
-  reader.onload = e => {
-    const img = new Image();
-    img.onerror = rej;
-    img.onload = () => {
-      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
-      const canvas = document.createElement('canvas');
-      canvas.width  = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      res(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.src = e.target.result;
+const GIF_MAX_BYTES   = 10 * 1024 * 1024;  // 動圖最大 10MB
+const GIF_THUMB_BYTES = 300 * 1024;        // 300KB 以下的 GIF 縮圖也會動
+const CHUNK_CHARS     = 900000;            // Firestore 單一文件上限 1MB，大圖切塊存
+
+// 先用 <img> 解碼，失敗再試 createImageBitmap（部分 Android 格式只有後者讀得了）
+const decodeImage = file => new Promise((res, rej) => {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => res({ source: img, w: img.naturalWidth, h: img.naturalHeight, done: () => URL.revokeObjectURL(url) });
+  img.onerror = async () => {
+    URL.revokeObjectURL(url);
+    try {
+      const bmp = await createImageBitmap(file);
+      res({ source: bmp, w: bmp.width, h: bmp.height, done: () => bmp.close && bmp.close() });
+    } catch { rej(new Error('unsupported')); }
   };
-  reader.readAsDataURL(file);
+  img.src = url;
 });
+const drawToJpeg = (decoded, maxSide, quality) => {
+  const scale = Math.min(1, maxSide / Math.max(decoded.w, decoded.h));
+  const canvas = document.createElement('canvas');
+  canvas.width  = Math.max(1, Math.round(decoded.w * scale));
+  canvas.height = Math.max(1, Math.round(decoded.h * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';                     // 透明背景的 PNG 轉 JPEG 時不會變黑
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(decoded.source, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', quality);
+};
+const fileToDataURL = file => new Promise((res, rej) => {
+  const r = new FileReader(); r.onerror = rej; r.onload = () => res(r.result); r.readAsDataURL(file);
+});
+const isGif = file => file.type === 'image/gif' || /\.gif$/i.test(file.name || '');
+
+// 把一張照片處理成 { thumb, full, isGif }
+const preparePhoto = async file => {
+  const gif = isGif(file);
+  if (gif && file.size > GIF_MAX_BYTES) throw new Error('gif-too-big');
+  const decoded = await decodeImage(file);
+  try {
+    if (gif) {
+      const raw = await fileToDataURL(file);
+      return { thumb: file.size <= GIF_THUMB_BYTES ? raw : drawToJpeg(decoded, 360, 0.75), full: raw, isGif: true };
+    }
+    return { thumb: drawToJpeg(decoded, 360, 0.75), full: drawToJpeg(decoded, 1280, 0.82), isGif: false };
+  } finally { decoded.done(); }
+};
+
+// 大圖切塊：photoFull/{id} 放第一塊和總塊數，photoFull/{id}__1、__2… 放其餘
+const saveFull = async (dramaId, id, src) => {
+  const parts = Math.max(1, Math.ceil(src.length / CHUNK_CHARS));
+  const piece = i => src.slice(i * CHUNK_CHARS, (i + 1) * CHUNK_CHARS);
+  // 一次 batch 上限 10MB，大 GIF 會超過，所以逐塊寫；第一塊（含總塊數）最後寫
+  await Promise.all(Array.from({ length: parts - 1 }, (_, k) =>
+    setDoc(doc(db, 'dramas', dramaId, 'photoFull', `${id}__${k + 1}`), { src: piece(k + 1) })));
+  await setDoc(doc(db, 'dramas', dramaId, 'photoFull', id), { src: piece(0), parts });
+  return parts;
+};
+const loadFull = async (dramaId, id) => {
+  const first = await getDoc(doc(db, 'dramas', dramaId, 'photoFull', id));
+  if (!first.exists()) return null;
+  const { src, parts = 1 } = first.data();
+  if (parts <= 1) return src;
+  const rest = await Promise.all(Array.from({ length: parts - 1 }, (_, i) => getDoc(doc(db, 'dramas', dramaId, 'photoFull', `${id}__${i + 1}`))));
+  return src + rest.map(r => (r.exists() ? r.data().src : '')).join('');
+};
+const deletePhoto = async (dramaId, photo) => {
+  const parts = photo.parts || 1;
+  await Promise.all([
+    deleteDoc(doc(db, 'dramas', dramaId, 'photos', photo.id)),
+    ...Array.from({ length: parts }, (_, i) => deleteDoc(doc(db, 'dramas', dramaId, 'photoFull', i === 0 ? photo.id : `${photo.id}__${i}`))),
+  ]);
+};
+const UPLOAD_ERRORS = {
+  'unsupported':  '格式不支援（例如 HEIC，請先轉成 JPG）',
+  'gif-too-big':  'GIF 超過 10MB',
+};
 
 // 有集數的依集數排，沒集數的排後面，同集再依新增時間
-const sortPhotos = list => [...list].sort((a, b) => {
+const byEpisode = (a, b) => {
   const ea = parseInt(a.ep), eb = parseInt(b.ep);
   const ha = !isNaN(ea), hb = !isNaN(eb);
   if (ha && hb && ea !== eb) return ea - eb;
   if (ha !== hb) return ha ? -1 : 1;
-  return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
+  return (a.createdAt?.seconds || Infinity) - (b.createdAt?.seconds || Infinity);
+};
+// 手動排過序的照片照 order 排；還沒排過的接在後面，照集數
+const sortPhotos = list => [...list].sort((a, b) => {
+  const oa = typeof a.order === 'number', ob = typeof b.order === 'number';
+  if (oa && ob && a.order !== b.order) return a.order - b.order;
+  if (oa !== ob) return oa ? -1 : 1;
+  return byEpisode(a, b);
 });
 
 function AlbumUploadSheet({ files, onClose, onUpload }) {
@@ -3542,8 +3624,8 @@ function AlbumViewer({ dramaId, photos, startIndex, onClose, showToast }) {
   // 大圖只在點開時讀取，讀到前先顯示縮圖
   useEffect(() => {
     if (!photo || fullSrc[photo.id]) return;
-    getDoc(doc(db, 'dramas', dramaId, 'photoFull', photo.id)).then(snap => {
-      if (snap.exists()) setFullSrc(m => ({ ...m, [photo.id]: snap.data().src }));
+    loadFull(dramaId, photo.id).then(src => {
+      if (src) setFullSrc(m => ({ ...m, [photo.id]: src }));
     }).catch(() => {});
   }, [photo?.id]);
 
@@ -3568,10 +3650,7 @@ function AlbumViewer({ dramaId, photos, startIndex, onClose, showToast }) {
   };
   const remove = async () => {
     if (!confirm('確定要刪除這張照片嗎？')) return;
-    await Promise.all([
-      deleteDoc(doc(db, 'dramas', dramaId, 'photos', photo.id)),
-      deleteDoc(doc(db, 'dramas', dramaId, 'photoFull', photo.id)),
-    ]);
+    await deletePhoto(dramaId, photo);
     showToast && showToast('已刪除');
   };
 
@@ -3612,6 +3691,7 @@ function AlbumViewer({ dramaId, photos, startIndex, onClose, showToast }) {
           )
         : React.createElement(React.Fragment, null,
             React.createElement('div', { className: 'album-viewer-meta' },
+              photo.isGif && React.createElement('span', null, 'GIF'),
               photo.tag && React.createElement('span', null, photo.tag),
               photo.ep && React.createElement('span', null, `第 ${photo.ep} 集`)
             ),
@@ -3627,6 +3707,10 @@ function DramaAlbum({ dramaId, showToast }) {
   const [pending, setPending] = useState(null);
   const [viewIdx, setViewIdx] = useState(null);
   const [showAll, setShowAll] = useState(false);
+  const [sorting, setSorting] = useState(false);   // 排序模式
+  const [draft, setDraft] = useState([]);          // 排序中的暫存順序
+  const [picked, setPicked] = useState(null);      // 排序模式中選起來的那張
+  const [savingOrder, setSavingOrder] = useState(false);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'dramas', dramaId, 'photos'),
@@ -3636,16 +3720,44 @@ function DramaAlbum({ dramaId, showToast }) {
   }, [dramaId]);
 
   const upload = async ({ tag, ep, caption }) => {
-    let ok = 0;
+    let ok = 0; const fails = [];
+    // 已經手動排過序的話，新照片接在最後面
+    const orders = (photos || []).map(p => p.order).filter(o => typeof o === 'number');
+    let nextOrder = orders.length ? Math.max(...orders) + 1 : null;
     for (const file of pending) {
       try {
-        const [thumb, full] = await Promise.all([resizeImage(file, 360, 0.75), resizeImage(file, 1280, 0.82)]);
-        const ref = await addDoc(collection(db, 'dramas', dramaId, 'photos'), { thumb, tag, ep, caption, createdAt: serverTimestamp() });
-        await setDoc(doc(db, 'dramas', dramaId, 'photoFull', ref.id), { src: full });
+        const { thumb, full, isGif } = await preparePhoto(file);
+        const ref = doc(collection(db, 'dramas', dramaId, 'photos'));
+        const parts = await saveFull(dramaId, ref.id, full);
+        const meta = { thumb, tag, ep, caption, isGif, parts, createdAt: serverTimestamp() };
+        if (nextOrder !== null) meta.order = nextOrder++;
+        await setDoc(ref, meta);
         ok++;
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error('上傳失敗', file.name, file.type, file.size, e);
+        fails.push(UPLOAD_ERRORS[e.message] || '上傳失敗');
+      }
     }
-    showToast && showToast(ok === pending.length ? `已新增 ${ok} 張` : `新增 ${ok} 張，${pending.length - ok} 張失敗`);
+    if (!fails.length) showToast && showToast(`已新增 ${ok} 張`);
+    else showToast && showToast(`新增 ${ok} 張，${fails.length} 張失敗：${[...new Set(fails)].join('、')}`);
+  };
+
+  const startSort = () => { setDraft(photos || []); setPicked(null); setSorting(true); setFilter('全部'); };
+  const tapInSort = i => {
+    if (picked === null) { setPicked(i); return; }
+    if (picked === i) { setPicked(null); return; }
+    setDraft(d => { const n = [...d]; const [m] = n.splice(picked, 1); n.splice(i, 0, m); return n; });
+    setPicked(null);
+  };
+  const saveOrder = async () => {
+    setSavingOrder(true);
+    try {
+      const batch = writeBatch(db);
+      draft.forEach((p, i) => { if (p.order !== i) batch.update(doc(db, 'dramas', dramaId, 'photos', p.id), { order: i }); });
+      await batch.commit();
+      setSorting(false); showToast && showToast('順序已儲存');
+    } catch (e) { console.error(e); showToast && showToast('儲存失敗'); }
+    finally { setSavingOrder(false); }
   };
 
   const all = photos || [];
@@ -3657,7 +3769,9 @@ function DramaAlbum({ dramaId, showToast }) {
   return React.createElement('div', { className: 'album-section' },
     React.createElement('div', { className: 'album-head' },
       React.createElement('div', { className: 'detail-notes-title' }, all.length ? `花絮相簿・${all.length}` : '花絮相簿'),
-      React.createElement('label', { className: 'album-add' },
+      all.length > 1 && !sorting && React.createElement('button', { className: 'album-add', onClick: startSort },
+        React.createElement('i', { className: 'ph-duotone ph-arrows-down-up' }), '排序'),
+      !sorting && React.createElement('label', { className: 'album-add' },
         React.createElement('i', { className: 'ph-duotone ph-image-square' }), '新增',
         React.createElement('input', { type: 'file', accept: 'image/*', multiple: true, onChange: e => {
           const fs = [...e.target.files];
@@ -3666,7 +3780,27 @@ function DramaAlbum({ dramaId, showToast }) {
         } })
       )
     ),
-    photos === null
+    sorting
+      ? React.createElement(React.Fragment, null,
+          React.createElement('div', { className: 'album-sort-hint' },
+            picked === null ? '先點一張照片，再點想放的位置，它就會移過去。' : '現在點想放的位置（再點一次同一張可取消）'),
+          React.createElement('div', { className: 'album-grid' },
+            draft.map((p, i) => React.createElement('button', {
+              key: p.id, className: 'album-thumb sorting' + (picked === i ? ' picked' : ''),
+              onClick: () => tapInSort(i), 'aria-label': `第 ${i + 1} 張`, 'aria-pressed': picked === i
+            },
+              React.createElement('img', { src: p.thumb, alt: '' }),
+              React.createElement('span', { className: 'album-thumb-num' }, i + 1)
+            ))
+          ),
+          React.createElement('div', { className: 'album-sort-bar' },
+            React.createElement('button', { className: 'album-chip', onClick: () => { setDraft(d => [...d].sort(byEpisode)); setPicked(null); } }, '依集數排'),
+            React.createElement('span', { style: { flex: 1 } }),
+            React.createElement('button', { className: 'btn-secondary', onClick: () => setSorting(false), disabled: savingOrder }, '取消'),
+            React.createElement('button', { className: 'btn-primary', onClick: saveOrder, disabled: savingOrder }, savingOrder ? '儲存中…' : '完成')
+          )
+        )
+    : photos === null
       ? React.createElement('div', { className: 'album-empty' }, '載入中…')
       : !all.length
         ? React.createElement('div', { className: 'album-empty' },
@@ -3686,7 +3820,8 @@ function DramaAlbum({ dramaId, showToast }) {
                 'aria-label': [p.tag, p.ep && `第${p.ep}集`, p.caption].filter(Boolean).join(' ')
               },
                 React.createElement('img', { src: p.thumb, alt: '', loading: 'lazy' }),
-                p.ep && React.createElement('span', { className: 'album-thumb-ep' }, `EP${p.ep}`)
+                p.ep && React.createElement('span', { className: 'album-thumb-ep' }, `EP${p.ep}`),
+                p.isGif && React.createElement('span', { className: 'album-thumb-gif' }, 'GIF')
               ))
             ),
             list.length > LIMIT && React.createElement('button', { className: 'btn-secondary album-more', onClick: () => setShowAll(v => !v) },
@@ -3696,7 +3831,6 @@ function DramaAlbum({ dramaId, showToast }) {
     viewIdx !== null && React.createElement(AlbumViewer, { dramaId, photos: list, startIndex: viewIdx, onClose: () => setViewIdx(null), showToast })
   );
 }
-
 function DramaDetail({ item, onClose, onEdit, onPerson, showToast }) {
   const scrollRef = React.useRef(null);
   const [imgOpacity, setImgOpacity] = useState(1);
@@ -4031,7 +4165,7 @@ function FilterRow({ label, options, current, onSelect, chipClass }) {
 }
 
 /* ── DramaPage ── */
-function DramaPage({ db, showToast, externalShowForm, onExternalFormClose, dramas: items = [], dramasLoading: loading }) {
+function DramaPage({ db, showToast, externalShowForm, onExternalFormClose, dramas: items = [], dramasLoading: loading, onDramaViewChange }) {
   const [showForm, setShowForm]     = useState(false);
   const [editItem, setEditItem]     = useState(null);
   const [detailItem, setDetailItem] = useState(null);
@@ -4042,6 +4176,8 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose, drama
   const [platformFilter, setPlatformFilter] = useState('all');
   const [genreFilter, setGenreFilter]       = useState('all');
   const [view, setView]             = useState(() => readPref('dramaDefaultView', 'list'));
+  // 劇集的檢視切換會自動記住，下次打開沿用
+  const pickDramaView = v => { setView(v); writePref('dramaDefaultView', v); onDramaViewChange && onDramaViewChange(v); };
   const [dramaView, setDramaView]   = useState('dramas'); // 'dramas' | 'people'
   const [peopleTab, setPeopleTab]   = useState('cast'); // 'director' | 'writer' | 'cast'
   const [peopleSearch, setPeopleSearch] = useState('');
@@ -4345,9 +4481,9 @@ function DramaPage({ db, showToast, externalShowForm, onExternalFormClose, drama
         React.createElement('input', { type: 'text', placeholder: '搜尋劇名、類型或平台…', value: search, onChange: e => setSearch(e.target.value) })
       ),
       React.createElement('div', { className: 'view-toggle' },
-        React.createElement('button', { className: `view-btn${view==='poster'?' active':''}`, onClick: () => setView('poster'), title: '海報' }, React.createElement('i', { className: 'ph-duotone ph-film-strip' })),
-        React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
-        React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' }))
+        React.createElement('button', { className: `view-btn${view==='poster'?' active':''}`, onClick: () => pickDramaView('poster'), title: '海報' }, React.createElement('i', { className: 'ph-duotone ph-film-strip' })),
+        React.createElement('button', { className: `view-btn${view==='grid'?' active':''}`, onClick: () => pickDramaView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
+        React.createElement('button', { className: `view-btn${view==='list'?' active':''}`, onClick: () => pickDramaView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' }))
       )
     ),
     /* filter bar */
@@ -6794,6 +6930,8 @@ function App() {
   const [bookDefaultView, setBookDefaultView] = useState(() => readPref('bookDefaultView', 'grid'));
   const [dramaDefaultView, setDramaDefaultView] = useState(() => readPref('dramaDefaultView', 'list'));
   const [view,    setView]    = useState(() => readPref('bookDefaultView', 'grid'));
+  // 書架的檢視切換會自動記住
+  const pickBookView = v => { setView(v); setBookDefaultView(v); };
   const [search,  setSearch]  = useState('');
   const [catFilter, setCatFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -6999,7 +7137,7 @@ function App() {
     /* main */
     React.createElement('main', { className: 'main' },
       page === 'collection'
-        ? React.createElement(DramaPage, { db, showToast, dramas: items, dramasLoading, externalShowForm: collShowForm, onExternalFormClose: () => setCollShowForm(false) })
+        ? React.createElement(DramaPage, { db, showToast, dramas: items, dramasLoading, onDramaViewChange: setDramaDefaultView, externalShowForm: collShowForm, onExternalFormClose: () => setCollShowForm(false) })
         : page === 'events'
         ? React.createElement(EventsPage, { db, showToast, externalShowForm: eventsShowForm, onExternalFormClose: () => setEventsShowForm(false) })
         : page === 'achievements'
@@ -7081,9 +7219,9 @@ function App() {
           React.createElement('option', { key: c, value: c }, c === 'all' ? '全部分類' : c)
         )),
         React.createElement('div', { className: 'view-toggle' },
-          React.createElement('button', { className: `view-btn${view==='grid' ? ' active' : ''}`, onClick: () => setView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
-          shelfView === 'books' && React.createElement('button', { className: `view-btn${view==='list' ? ' active' : ''}`, onClick: () => setView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' })),
-          React.createElement('button', { className: `view-btn${view==='shelf' ? ' active' : ''}`, onClick: () => setView('shelf') }, React.createElement('i', { className: 'ph-duotone ph-books' }))
+          React.createElement('button', { className: `view-btn${view==='grid' ? ' active' : ''}`, onClick: () => pickBookView('grid') }, React.createElement('i', { className: 'ph-duotone ph-grid-four' })),
+          shelfView === 'books' && React.createElement('button', { className: `view-btn${view==='list' ? ' active' : ''}`, onClick: () => pickBookView('list') }, React.createElement('i', { className: 'ph-duotone ph-list' })),
+          React.createElement('button', { className: `view-btn${view==='shelf' ? ' active' : ''}`, onClick: () => pickBookView('shelf') }, React.createElement('i', { className: 'ph-duotone ph-books' }))
         )
       ),
 
@@ -7241,8 +7379,8 @@ function App() {
         ),
         /* Default views */
         React.createElement('div', { className: 'settings-section' },
-          React.createElement('div', { className: 'settings-section-title' }, '預設檢視'),
-          React.createElement('div', { className: 'settings-hint' }, '開啟頁面時先用這個檢視，之後還是可以隨時切換。'),
+          React.createElement('div', { className: 'settings-section-title' }, '檢視方式'),
+          React.createElement('div', { className: 'settings-hint' }, '會自動記住你上次用的檢視，下次打開直接沿用；也可以在這裡直接改。'),
           React.createElement('div', { className: 'pref-row' },
             React.createElement('span', { className: 'pref-row-label' }, '書籍'),
             React.createElement('div', { className: 'pref-seg', role: 'radiogroup', 'aria-label': '書籍預設檢視' },
