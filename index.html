@@ -998,11 +998,16 @@
   .album-tag-pick { display: flex; gap: 6px; flex-wrap: wrap; }
 
   .album-viewer {
-    position: fixed; inset: 0; z-index: 450; background: rgba(0,0,0,0.94);
-    display: flex; flex-direction: column; animation: overlayIn 0.2s ease;
+    position: fixed; inset: 0; z-index: 450; background: transparent;
+    display: flex; flex-direction: column; animation: overlayIn 0.2s ease; overflow: hidden;
     padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  .album-viewer-top { display: flex; align-items: center; gap: 6px; padding: 10px 10px; color: #fff; }
+  .album-viewer-bg { position: absolute; inset: 0; background: #000; }
+  .album-viewer-top { position: relative; z-index: 2; display: flex; align-items: center; gap: 6px; padding: 10px 10px; color: #fff; }
+  .album-viewer-top, .album-viewer-info, .album-viewer-nav { transition: opacity 0.2s ease; }
+  .album-viewer.no-chrome .album-viewer-top,
+  .album-viewer.no-chrome .album-viewer-info,
+  .album-viewer.no-chrome .album-viewer-nav { opacity: 0; pointer-events: none; }
   .album-viewer-count { flex: 1; font-size: 0.85rem; opacity: 0.8; padding-left: 6px; }
   .album-viewer-btn {
     width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer;
@@ -1010,13 +1015,16 @@
     display: flex; align-items: center; justify-content: center;
   }
   .album-viewer-btn:disabled { opacity: 0.25; cursor: default; }
-  .album-viewer-stage { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; touch-action: pan-y; }
-  .album-viewer-stage img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; }
-  .album-viewer-nav { position: absolute; top: 50%; transform: translateY(-50%); }
+  .album-viewer-stage { flex: 1; min-height: 0; position: relative; z-index: 1; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .album-track { position: absolute; inset: 0; will-change: transform; }
+  .album-slide { position: absolute; inset: 0; }
+  .album-zoom { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; transform-origin: 50% 50%; will-change: transform; }
+  .album-zoom img { max-width: 100%; max-height: 100%; object-fit: contain; pointer-events: none; -webkit-user-drag: none; }
+  .album-viewer-nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; }
   .album-viewer-nav.prev { left: 8px; }
   .album-viewer-nav.next { right: 8px; }
   @media (hover: none) { .album-viewer-nav { display: none; } }
-  .album-viewer-info { padding: 12px 18px 18px; color: #fff; min-height: 24px; }
+  .album-viewer-info { position: relative; z-index: 2; padding: 12px 18px 18px; color: #fff; min-height: 24px; }
   .album-viewer-meta { display: flex; gap: 6px; font-size: 0.75rem; margin-bottom: 6px; }
   .album-viewer-meta span { background: rgba(255,255,255,0.15); padding: 2px 8px; border-radius: 8px; }
   .album-viewer-caption { font-size: 0.9rem; line-height: 1.6; opacity: 0.92; white-space: pre-wrap; }
@@ -3523,10 +3531,10 @@ function AlbumTagPicker({ value, onChange, tags }) {
   );
 }
 
-const GIF_KEEP_BYTES  = 6 * 1024 * 1024;   // 6MB 以下的 GIF 原檔保存
+const GIF_KEEP_BYTES  = 4 * 1024 * 1024;   // 4MB 以下的 GIF 原檔保存
 const GIF_INPUT_MAX   = 60 * 1024 * 1024;  // 超過 60MB 的 GIF 不處理
 const GIF_THUMB_BYTES = 300 * 1024;        // 300KB 以下的 GIF 縮圖也會動
-const CHUNK_CHARS     = 900000;            // Firestore 單一文件上限 1MB，大圖切塊存
+const CHUNK_CHARS     = 700000;            // Firestore 單一文件上限 1MB，大圖切塊存（留餘裕）
 const DUP_DISTANCE    = 6;                 // 兩張圖指紋差異在這以內就當作重複
 
 // 讀檔頭判斷真正的格式（副檔名和 file.type 常常不準）
@@ -3705,10 +3713,20 @@ const preparePhoto = async (file, onProgress) => {
 const saveFull = async (dramaId, id, src) => {
   const parts = Math.max(1, Math.ceil(src.length / CHUNK_CHARS));
   const piece = i => src.slice(i * CHUNK_CHARS, (i + 1) * CHUNK_CHARS);
-  // 一次 batch 上限 10MB，大 GIF 會超過，所以逐塊寫；第一塊（含總塊數）最後寫
-  await Promise.all(Array.from({ length: parts - 1 }, (_, k) =>
-    setDoc(doc(db, 'dramas', dramaId, 'photoFull', `${id}__${k + 1}`), { src: piece(k + 1) })));
-  await setDoc(doc(db, 'dramas', dramaId, 'photoFull', id), { src: piece(0), parts });
+  // 一塊一塊依序寫，等前一塊確定寫入才寫下一塊；
+  // 同時送太多大文件，會被合併成一個超過上限的請求而整批失敗
+  const written = [];
+  try {
+    for (let k = 1; k < parts; k++) {
+      const ref = doc(db, 'dramas', dramaId, 'photoFull', `${id}__${k}`);
+      await setDoc(ref, { src: piece(k) });
+      written.push(ref);
+    }
+    await setDoc(doc(db, 'dramas', dramaId, 'photoFull', id), { src: piece(0), parts });   // 第一塊（含總塊數）最後寫
+  } catch (e) {
+    written.forEach(r => deleteDoc(r).catch(() => {}));   // 失敗就把寫了一半的清掉
+    throw e;
+  }
   return parts;
 };
 const loadFull = async (dramaId, id) => {
@@ -3733,7 +3751,10 @@ const uploadErrorText = code => {
   if (code === 'gif-too-big')       return 'GIF 超過 60MB';
   if (code === 'gif-shrink-failed') return 'GIF 壓縮後還是太大';
   if (code.startsWith('unsupported:')) return `瀏覽器讀不了這個格式（${code.slice(12)}）`;
-  return '上傳失敗';
+  if (code.startsWith('fs:permission-denied')) return '沒有寫入權限（請檢查 Firestore 規則）';
+  if (code.startsWith('fs:resource-exhausted')) return '超過 Firestore 用量上限';
+  if (code.startsWith('fs:')) return `上傳失敗（${code.slice(3, 80)}）`;
+  return `上傳失敗（${code.slice(0, 80)}）`;
 };
 
 // 有集數的依集數排，沒集數的排後面，同集再依新增時間
@@ -3898,7 +3919,11 @@ function AlbumViewer({ dramaId, photos, allTags, startIndex, onClose, showToast 
   const [fullSrc, setFullSrc] = useState({});
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
-  const touchX = useRef(null);
+  const [chrome, setChrome] = useState(true);          // 單擊切換上下工具列
+  const stageRef = useRef(null), trackRef = useRef(null), zoomRef = useRef(null), bgRef = useRef(null);
+  // 手勢狀態放在 ref，滑動時直接改 transform，不經過 React 重繪，才會順
+  const g = useRef({ s: 1, tx: 0, ty: 0, pointers: new Map(), mode: null, start: null, pinch: null, lastTap: 0, tapTimer: null, animating: false }).current;
+  const GAP = 16;
   const photo = photos[idx];
 
   // 刪掉照片後索引超出範圍時往回退；全部刪光就關閉
@@ -3906,29 +3931,172 @@ function AlbumViewer({ dramaId, photos, allTags, startIndex, onClose, showToast 
     if (idx >= photos.length) photos.length ? setIdx(photos.length - 1) : onClose();
   }, [photos.length]);
 
-  // 大圖只在點開時讀取，讀到前先顯示縮圖
+  // 大圖只在需要時讀取（目前這張和左右兩張），讀到前先顯示縮圖
   useEffect(() => {
-    if (!photo || fullSrc[photo.id]) return;
-    loadFull(dramaId, photo.id).then(src => {
-      if (src) setFullSrc(m => ({ ...m, [photo.id]: src }));
-    }).catch(() => {});
-  }, [photo?.id]);
+    [idx, idx + 1, idx - 1].forEach(i => {
+      const p = photos[i];
+      if (!p || fullSrc[p.id]) return;
+      loadFull(dramaId, p.id).then(src => { if (src) setFullSrc(m => ({ ...m, [p.id]: src })); }).catch(() => {});
+    });
+  }, [idx, photos.length]);
+
+  /* ── 直接操作 DOM 的小工具 ── */
+  const setTrack = (x, y, animate) => {
+    const el = trackRef.current; if (!el) return;
+    el.style.transition = animate ? 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' : 'none';
+    el.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  };
+  const setZoom = animate => {
+    const el = zoomRef.current; if (!el) return;
+    el.style.transition = animate ? 'transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1)' : 'none';
+    el.style.transform = `translate3d(${g.tx}px, ${g.ty}px, 0) scale(${g.s})`;
+  };
+  const setBg = (opacity, animate) => {
+    const el = bgRef.current; if (!el) return;
+    el.style.transition = animate ? 'opacity 0.3s ease' : 'none';
+    el.style.opacity = opacity;
+  };
+  const stageBox = () => stageRef.current.getBoundingClientRect();
+  const fromCenter = (x, y) => { const b = stageBox(); return { x: x - (b.left + b.width / 2), y: y - (b.top + b.height / 2) }; };
+  // 放大後可以拖動的範圍
+  const limits = s => {
+    const b = stageBox();
+    const img = zoomRef.current && zoomRef.current.querySelector('img');
+    const nw = (img && img.naturalWidth) || b.width, nh = (img && img.naturalHeight) || b.height;
+    const fit = Math.min(b.width / nw, b.height / nh, 1);   // 小圖不會被放大到滿版
+    return { mx: Math.max(0, (nw * fit * s - b.width) / 2), my: Math.max(0, (nh * fit * s - b.height) / 2) };
+  };
+  const settleZoom = () => {
+    g.s = Math.min(4, Math.max(1, g.s));
+    if (g.s <= 1.01) { g.s = 1; g.tx = 0; g.ty = 0; }
+    else {
+      const { mx, my } = limits(g.s);
+      g.tx = Math.max(-mx, Math.min(mx, g.tx));
+      g.ty = Math.max(-my, Math.min(my, g.ty));
+    }
+    setZoom(true);
+  };
+  const resetZoom = animate => { g.s = 1; g.tx = 0; g.ty = 0; setZoom(animate); };
+
+  // 換到新的一張時，在畫面更新前把位置歸零，避免閃一下
+  React.useLayoutEffect(() => { setTrack(0, 0, false); resetZoom(false); setBg(1, false); }, [idx]);
+
+  const goTo = dir => {
+    const target = idx + dir;
+    if (g.animating) return;
+    if (target < 0 || target >= photos.length) { setTrack(0, 0, true); return; }
+    resetZoom(true);
+    g.animating = true;
+    setTrack(-dir * (stageRef.current.clientWidth + GAP), 0, true);
+    setTimeout(() => { g.animating = false; setEditing(false); setIdx(target); }, 300);
+  };
 
   useEffect(() => {
     const onKey = e => {
       if (editing) return;
       if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowLeft') setIdx(i => Math.max(0, i - 1));
-      if (e.key === 'ArrowRight') setIdx(i => Math.min(photos.length - 1, i + 1));
+      if (e.key === 'ArrowLeft') goTo(-1);
+      if (e.key === 'ArrowRight') goTo(1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [photos.length, editing]);
+  }, [idx, photos.length, editing]);
+
+  /* ── 手勢：左右滑換張、雙指縮放、雙擊放大、放大後拖動、往下滑關閉 ── */
+  const onTap = e => {
+    const now = performance.now();
+    if (now - g.lastTap < 300) {
+      clearTimeout(g.tapTimer); g.lastTap = 0;
+      if (g.s > 1.01) { resetZoom(true); return; }
+      const p = fromCenter(e.clientX, e.clientY);
+      g.s = 2.5; g.tx = p.x - 2.5 * p.x; g.ty = p.y - 2.5 * p.y;
+      settleZoom();
+    } else {
+      g.lastTap = now;
+      g.tapTimer = setTimeout(() => setChrome(c => !c), 280);
+    }
+  };
+  const onPointerDown = e => {
+    if (g.animating || e.button > 0) return;
+    try { stageRef.current.setPointerCapture(e.pointerId); } catch {}
+    g.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (g.pointers.size === 2) {
+      const [a, b] = [...g.pointers.values()];
+      const mid = fromCenter((a.x + b.x) / 2, (a.y + b.y) / 2);
+      g.mode = 'pinch';
+      g.pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, s0: g.s, cx: (mid.x - g.tx) / g.s, cy: (mid.y - g.ty) / g.s };
+      setTrack(0, 0, true); setBg(1, true);
+    } else if (g.pointers.size === 1) {
+      g.mode = null;
+      g.start = { x: e.clientX, y: e.clientY, tx: g.tx, ty: g.ty, t: performance.now() };
+    }
+  };
+  const onPointerMove = e => {
+    if (!g.pointers.has(e.pointerId)) return;
+    g.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (g.mode === 'pinch') {
+      if (g.pointers.size < 2) return;
+      const [a, b] = [...g.pointers.values()];
+      const mid = fromCenter((a.x + b.x) / 2, (a.y + b.y) / 2);
+      g.s = Math.max(0.7, Math.min(6, g.pinch.s0 * Math.hypot(a.x - b.x, a.y - b.y) / g.pinch.d0));
+      g.tx = mid.x - g.s * g.pinch.cx; g.ty = mid.y - g.s * g.pinch.cy;
+      setZoom(false);
+      return;
+    }
+    if (g.pointers.size !== 1 || !g.start) return;
+    const dx = e.clientX - g.start.x, dy = e.clientY - g.start.y;
+    if (!g.mode) {
+      if (Math.hypot(dx, dy) < 8) return;
+      g.mode = g.s > 1.01 ? 'pan' : Math.abs(dx) > Math.abs(dy) ? 'swipe' : dy > 0 ? 'close' : 'none';
+    }
+    if (g.mode === 'pan') { g.tx = g.start.tx + dx; g.ty = g.start.ty + dy; setZoom(false); }
+    else if (g.mode === 'swipe') {
+      const atEdge = (dx > 0 && idx === 0) || (dx < 0 && idx === photos.length - 1);
+      setTrack(atEdge ? dx * 0.3 : dx, 0, false);           // 第一張／最後一張有彈性阻力
+    } else if (g.mode === 'close') {
+      setTrack(dx * 0.3, Math.max(0, dy), false);
+      setBg(1 - Math.min(1, Math.max(0, dy) / 500), false);
+    }
+  };
+  const onPointerUp = e => {
+    if (!g.pointers.has(e.pointerId)) return;
+    g.pointers.delete(e.pointerId);
+    if (g.mode === 'pinch') {
+      if (g.pointers.size < 2) {
+        settleZoom();
+        const rest = [...g.pointers.values()][0];
+        g.mode = rest && g.s > 1.01 ? 'pan' : rest ? 'none' : null;
+        if (rest) g.start = { x: rest.x, y: rest.y, tx: g.tx, ty: g.ty, t: performance.now() };
+      }
+      return;
+    }
+    if (g.pointers.size > 0 || !g.start) return;
+    const cancelled = e.type === 'pointercancel';
+    const dt = Math.max(1, performance.now() - g.start.t);
+    const dx = e.clientX - g.start.x, dy = e.clientY - g.start.y;
+    if (g.mode === 'swipe') {
+      const w = stageRef.current.clientWidth, v = dx / dt;
+      if (!cancelled && (dx < -w * 0.18 || v < -0.4)) goTo(1);
+      else if (!cancelled && (dx > w * 0.18 || v > 0.4)) goTo(-1);
+      else setTrack(0, 0, true);
+    } else if (g.mode === 'close') {
+      if (!cancelled && (dy > 120 || dy / dt > 0.6)) onClose();
+      else { setTrack(0, 0, true); setBg(1, true); }
+    } else if (g.mode === 'pan') settleZoom();
+    else if (!g.mode && !cancelled) onTap(e);
+    g.mode = null; g.start = null;
+  };
+  const onWheel = e => {                                 // 電腦上用滾輪縮放
+    const p = fromCenter(e.clientX, e.clientY);
+    const s = Math.min(4, Math.max(1, g.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+    const cx = (p.x - g.tx) / g.s, cy = (p.y - g.ty) / g.s;
+    g.s = s; g.tx = p.x - s * cx; g.ty = p.y - s * cy;
+    settleZoom();
+  };
 
   if (!photo) return null;
 
-  const go = d => { setEditing(false); setIdx(i => Math.min(photos.length - 1, Math.max(0, i + d))); };
-  const startEdit = () => { setForm({ tag: photo.tag || '劇照', ep: photo.ep || '', caption: photo.caption || '' }); setEditing(true); };
+  const startEdit = () => { setForm({ tag: photo.tag || '劇照', ep: photo.ep || '', caption: photo.caption || '' }); setEditing(true); setChrome(true); };
   const saveEdit = async () => {
     await updateDoc(doc(db, 'dramas', dramaId, 'photos', photo.id), { tag: form.tag, ep: String(form.ep).trim(), caption: form.caption.trim() });
     setEditing(false); showToast && showToast('已更新');
@@ -3939,7 +4107,10 @@ function AlbumViewer({ dramaId, photos, allTags, startIndex, onClose, showToast 
     showToast && showToast('已刪除');
   };
 
-  return React.createElement('div', { className: 'album-viewer', role: 'dialog', 'aria-label': '照片檢視' },
+  const slides = [idx - 1, idx, idx + 1].filter(i => i >= 0 && i < photos.length);
+
+  return React.createElement('div', { className: 'album-viewer' + (chrome ? '' : ' no-chrome'), role: 'dialog', 'aria-label': '照片檢視' },
+    React.createElement('div', { className: 'album-viewer-bg', ref: bgRef }),
     React.createElement('div', { className: 'album-viewer-top' },
       React.createElement('span', { className: 'album-viewer-count' }, `${idx + 1} / ${photos.length}`),
       React.createElement('button', { className: 'album-viewer-btn', onClick: editing ? () => setEditing(false) : startEdit, 'aria-label': editing ? '取消編輯' : '編輯' },
@@ -3949,21 +4120,27 @@ function AlbumViewer({ dramaId, photos, allTags, startIndex, onClose, showToast 
       React.createElement('button', { className: 'album-viewer-btn', onClick: onClose, 'aria-label': '關閉' }, '✕')
     ),
     React.createElement('div', {
-      className: 'album-viewer-stage',
-      onTouchStart: e => { touchX.current = e.touches[0].clientX; },
-      onTouchEnd: e => {
-        if (touchX.current == null) return;
-        const dx = e.changedTouches[0].clientX - touchX.current;
-        touchX.current = null;
-        if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1);
-      }
+      className: 'album-viewer-stage', ref: stageRef,
+      onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp, onWheel
     },
-      React.createElement('img', { src: fullSrc[photo.id] || photo.thumb, alt: photo.caption || '' }),
-      React.createElement('button', { className: 'album-viewer-btn album-viewer-nav prev', disabled: idx === 0, onClick: () => go(-1), 'aria-label': '上一張' },
-        React.createElement('i', { className: 'ph-duotone ph-caret-left' })),
-      React.createElement('button', { className: 'album-viewer-btn album-viewer-nav next', disabled: idx === photos.length - 1, onClick: () => go(1), 'aria-label': '下一張' },
-        React.createElement('i', { className: 'ph-duotone ph-caret-right' }))
+      React.createElement('div', { className: 'album-track', ref: trackRef },
+        slides.map(i => {
+          const p = photos[i], off = i - idx;
+          return React.createElement('div', {
+            key: p.id, className: 'album-slide',
+            style: { transform: `translate3d(calc(${off} * (100% + ${GAP}px)), 0, 0)` }
+          },
+            React.createElement('div', { className: 'album-zoom', ref: off === 0 ? zoomRef : undefined },
+              React.createElement('img', { src: fullSrc[p.id] || p.thumb, alt: off === 0 ? (p.caption || '') : '', draggable: false })
+            )
+          );
+        })
+      )
     ),
+    React.createElement('button', { className: 'album-viewer-btn album-viewer-nav prev', disabled: idx === 0, onClick: () => goTo(-1), 'aria-label': '上一張' },
+      React.createElement('i', { className: 'ph-duotone ph-caret-left' })),
+    React.createElement('button', { className: 'album-viewer-btn album-viewer-nav next', disabled: idx === photos.length - 1, onClick: () => goTo(1), 'aria-label': '下一張' },
+      React.createElement('i', { className: 'ph-duotone ph-caret-right' })),
     React.createElement('div', { className: 'album-viewer-info' },
       editing
         ? React.createElement('div', { className: 'album-viewer-edit' },
@@ -4022,7 +4199,7 @@ function DramaAlbum({ dramaId, showToast }) {
         ok++;
       } catch (e) {
         console.error('上傳失敗', file.name, file.type, file.size, e);
-        fails.push({ file, error: e.message });
+        fails.push({ file, error: e && e.code ? `fs:${e.code}：${e.message}` : (e && e.message) || 'unknown' });
       }
     }
     showToast && showToast(fails.length ? `新增 ${ok} 張，${fails.length} 張失敗` : `已新增 ${ok} 張`);
