@@ -964,6 +964,35 @@
   .album-sort-hint { font-size: 0.78rem; color: var(--text3); margin-bottom: 10px; line-height: 1.5; }
   .album-sort-bar { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
   .album-head button.album-add { font-family: inherit; }
+  .album-sheet-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; max-height: 40vh; overflow-y: auto; }
+  .album-sheet-item {
+    position: relative; aspect-ratio: 1; border: none; padding: 0; border-radius: 6px; overflow: hidden;
+    background: var(--bg3); cursor: pointer; transition: opacity 0.15s ease;
+  }
+  .album-sheet-item:disabled { cursor: default; }
+  .album-sheet-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .album-sheet-item.off img { opacity: 0.35; filter: grayscale(0.6); }
+  .album-sheet-broken {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 4px; color: var(--text3); font-size: 0.55rem; word-break: break-all; text-align: center; line-height: 1.2;
+  }
+  .album-sheet-broken i { font-size: 1.3rem; }
+  .album-sheet-badge {
+    position: absolute; left: 3px; right: 3px; bottom: 3px; padding: 1px 4px; border-radius: 4px;
+    background: rgba(0,0,0,0.6); color: #fff; font-size: 0.58rem; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .album-sheet-badge.dup  { background: #b8862b; }
+  .album-sheet-badge.err  { background: #b5483f; }
+  .album-sheet-badge.done { background: var(--accent); }
+  .album-sheet-notes { font-size: 0.78rem; color: var(--text2); line-height: 1.55; margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px; }
+  .album-sheet-notes .err { color: #b5483f; }
+  .album-chip-add { border-style: dashed; display: inline-flex; align-items: center; }
+  .album-tag-add-box { display: inline-flex; gap: 4px; align-items: center; }
+  .album-tag-input {
+    width: 92px; padding: 3px 10px; border-radius: 14px; border: 1px solid var(--accent);
+    background: var(--bg); color: var(--text); font-size: 0.76rem; font-family: inherit; outline: none;
+  }
+  .album-viewer-edit .album-tag-input { background: rgba(255,255,255,0.1); color: #fff; }
   .album-sheet-previews { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; }
   .album-sheet-previews img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; flex: 0 0 auto; }
   .album-tag-pick { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -3460,26 +3489,100 @@ function DramaForm({ item, dramas = [], onClose, onSave, db }) {
 /* ── 花絮相簿 ──
    dramas/{id}/photos    ：縮圖＋分類、集數、備註（相簿格子只讀這裡，很輕）
    dramas/{id}/photoFull ：大圖，用同一個 id，點開時才讀 */
-const ALBUM_TAGS = ['劇照', '花絮', '截圖'];
+const ALBUM_TAGS = ['劇照', '花絮', '截圖', '海報', '定裝照', '讀本會', '發布會'];
+// 自訂分類存在這台裝置；相簿裡已經用過的分類也會自動列出來
+const loadCustomTags = () => { try { return JSON.parse(localStorage.getItem('albumCustomTags') || '[]'); } catch { return []; } };
+const saveCustomTag = t => {
+  const list = loadCustomTags();
+  if (!list.includes(t) && !ALBUM_TAGS.includes(t)) { list.push(t); try { localStorage.setItem('albumCustomTags', JSON.stringify(list)); } catch {} }
+};
+const allAlbumTags = (photos = []) => [...new Set([...ALBUM_TAGS, ...loadCustomTags(), ...photos.map(p => p.tag).filter(Boolean)])];
 
-const GIF_MAX_BYTES   = 10 * 1024 * 1024;  // 動圖最大 10MB
+function AlbumTagPicker({ value, onChange, tags }) {
+  const [list, setList] = useState(tags);
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState('');
+  const confirm = () => {
+    const t = text.trim().slice(0, 12);
+    if (t) { saveCustomTag(t); if (!list.includes(t)) setList(l => [...l, t]); onChange(t); }
+    setText(''); setAdding(false);
+  };
+  return React.createElement('div', { className: 'album-tag-pick' },
+    list.map(t => React.createElement('button', { key: t, type: 'button', className: 'album-chip' + (value === t ? ' active' : ''), onClick: () => onChange(t) }, t)),
+    adding
+      ? React.createElement('span', { className: 'album-tag-add-box' },
+          React.createElement('input', {
+            className: 'album-tag-input', autoFocus: true, value: text, maxLength: 12, placeholder: '新分類',
+            onChange: e => setText(e.target.value),
+            onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); confirm(); } if (e.key === 'Escape') setAdding(false); }
+          }),
+          React.createElement('button', { type: 'button', className: 'album-chip active', onClick: confirm }, '加入')
+        )
+      : React.createElement('button', { type: 'button', className: 'album-chip album-chip-add', onClick: () => setAdding(true) },
+          React.createElement('i', { className: 'ph-duotone ph-plus' }), ' 自訂')
+  );
+}
+
+const GIF_KEEP_BYTES  = 6 * 1024 * 1024;   // 6MB 以下的 GIF 原檔保存
+const GIF_INPUT_MAX   = 60 * 1024 * 1024;  // 超過 60MB 的 GIF 不處理
 const GIF_THUMB_BYTES = 300 * 1024;        // 300KB 以下的 GIF 縮圖也會動
 const CHUNK_CHARS     = 900000;            // Firestore 單一文件上限 1MB，大圖切塊存
+const DUP_DISTANCE    = 6;                 // 兩張圖指紋差異在這以內就當作重複
 
-// 先用 <img> 解碼，失敗再試 createImageBitmap（部分 Android 格式只有後者讀得了）
-const decodeImage = file => new Promise((res, rej) => {
-  const url = URL.createObjectURL(file);
-  const img = new Image();
-  img.onload = () => res({ source: img, w: img.naturalWidth, h: img.naturalHeight, done: () => URL.revokeObjectURL(url) });
-  img.onerror = async () => {
-    URL.revokeObjectURL(url);
-    try {
-      const bmp = await createImageBitmap(file);
-      res({ source: bmp, w: bmp.width, h: bmp.height, done: () => bmp.close && bmp.close() });
-    } catch { rej(new Error('unsupported')); }
-  };
-  img.src = url;
+// 讀檔頭判斷真正的格式（副檔名和 file.type 常常不準）
+const sniffType = bytes => {
+  const b = i => bytes[i], str = (s, e) => String.fromCharCode(...bytes.slice(s, e));
+  if (b(0) === 0xFF && b(1) === 0xD8) return 'image/jpeg';
+  if (b(0) === 0x89 && str(1, 4) === 'PNG') return 'image/png';
+  if (str(0, 3) === 'GIF') return 'image/gif';
+  if (str(0, 4) === 'RIFF' && str(8, 12) === 'WEBP') return 'image/webp';
+  if (str(0, 2) === 'BM') return 'image/bmp';
+  if (str(4, 8) === 'ftyp') {
+    const brand = str(8, 12);
+    if (brand === 'avif' || brand === 'avis') return 'image/avif';
+    if (['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'mif1', 'msf1'].includes(brand)) return 'image/heic';
+  }
+  return '';
+};
+
+const loadScript = src => new Promise((res, rej) => {
+  if (document.querySelector(`script[src="${src}"]`)) return res();
+  const el = document.createElement('script'); el.src = src; el.onload = res; el.onerror = rej;
+  document.head.appendChild(el);
 });
+
+// 讀檔 → 判斷格式 → 必要時把 HEIC 轉成 JPEG，回傳可以解碼的 Blob
+const readImageBlob = async file => {
+  let buf;
+  try { buf = await file.arrayBuffer(); }
+  catch { throw new Error('unreadable'); }
+  if (!buf.byteLength) throw new Error('unreadable');
+  const type = sniffType(new Uint8Array(buf, 0, Math.min(32, buf.byteLength))) || file.type || '';
+  if (type === 'image/heic') {
+    try {
+      await loadScript('https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js');
+      const out = await window.heic2any({ blob: new Blob([buf], { type }), toType: 'image/jpeg', quality: 0.9 });
+      return { blob: Array.isArray(out) ? out[0] : out, type: 'image/jpeg', buf: null };
+    } catch (e) { console.error(e); throw new Error('heic-failed'); }
+  }
+  return { blob: new Blob([buf], { type }), type, buf };
+};
+
+// 解碼：先 createImageBitmap，再退回 <img>
+const decodeBlob = async (blob, type) => {
+  try {
+    const bmp = await createImageBitmap(blob);
+    return { source: bmp, w: bmp.width, h: bmp.height, done: () => bmp.close && bmp.close() };
+  } catch {}
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => res({ source: img, w: img.naturalWidth, h: img.naturalHeight, done: () => URL.revokeObjectURL(url) });
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('unsupported:' + (type || '未知格式'))); };
+    img.src = url;
+  });
+};
+
 const drawToJpeg = (decoded, maxSide, quality) => {
   const scale = Math.min(1, maxSide / Math.max(decoded.w, decoded.h));
   const canvas = document.createElement('canvas');
@@ -3491,22 +3594,110 @@ const drawToJpeg = (decoded, maxSide, quality) => {
   ctx.drawImage(decoded.source, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL('image/jpeg', quality);
 };
-const fileToDataURL = file => new Promise((res, rej) => {
-  const r = new FileReader(); r.onerror = rej; r.onload = () => res(r.result); r.readAsDataURL(file);
-});
-const isGif = file => file.type === 'image/gif' || /\.gif$/i.test(file.name || '');
 
-// 把一張照片處理成 { thumb, full, isGif }
-const preparePhoto = async file => {
-  const gif = isGif(file);
-  if (gif && file.size > GIF_MAX_BYTES) throw new Error('gif-too-big');
-  const decoded = await decodeImage(file);
-  try {
-    if (gif) {
-      const raw = await fileToDataURL(file);
-      return { thumb: file.size <= GIF_THUMB_BYTES ? raw : drawToJpeg(decoded, 360, 0.75), full: raw, isGif: true };
+// 圖片指紋（dHash）：縮成 9×8 灰階比較相鄰亮度，同一張圖就算大小不同也會很接近
+const imageHash = decoded => {
+  const c = document.createElement('canvas'); c.width = 9; c.height = 8;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(decoded.source, 0, 0, 9, 8);
+  const d = ctx.getImageData(0, 0, 9, 8).data;
+  const g = i => d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
+  let bits = '';
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) bits += g(y * 9 + x) > g(y * 9 + x + 1) ? '1' : '0';
+  return bits.match(/.{4}/g).map(n => parseInt(n, 2).toString(16)).join('');
+};
+const hashDistance = (a, b) => {
+  if (!a || !b || a.length !== b.length) return 99;
+  let n = 0;
+  for (let i = 0; i < a.length; i++) { let x = parseInt(a[i], 16) ^ parseInt(b[i], 16); while (x) { n += x & 1; x >>= 1; } }
+  return n;
+};
+const hashFromDataURL = src => new Promise(res => {
+  const img = new Image();
+  img.onload = () => res(imageHash({ source: img, w: img.naturalWidth, h: img.naturalHeight }));
+  img.onerror = () => res(null);
+  img.src = src;
+});
+
+const blobToDataURL = blob => new Promise((res, rej) => {
+  const r = new FileReader(); r.onerror = rej; r.onload = () => res(r.result); r.readAsDataURL(blob);
+});
+const tick = () => new Promise(r => setTimeout(r, 0));
+
+// 把太大的 GIF 縮小重新編碼（保留動畫）；onProgress 回報 0–1
+const shrinkGif = async (buf, maxSide, step, onProgress) => {
+  const { parseGIF, decompressFrames } = await import('https://esm.sh/gifuct-js@2.1.2');
+  const { GIFEncoder, quantize, applyPalette } = await import('https://esm.sh/gifenc@1.0.3');
+  const gif = parseGIF(buf);
+  const frames = decompressFrames(gif, true);
+  const W = gif.lsd.width, H = gif.lsd.height;
+  const scale = Math.min(1, maxSide / Math.max(W, H));
+  const w = Math.max(1, Math.round(W * scale)), h = Math.max(1, Math.round(H * scale));
+  const full = document.createElement('canvas'); full.width = W; full.height = H;
+  const fctx = full.getContext('2d', { willReadFrequently: true });
+  const patch = document.createElement('canvas'); const pctx = patch.getContext('2d');
+  const out = document.createElement('canvas'); out.width = w; out.height = h;
+  const octx = out.getContext('2d', { willReadFrequently: true });
+  const enc = GIFEncoder();
+  let prev = null, restore = null, pendingDelay = 0;
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i];
+    if (prev) {                                     // 處理上一格的 disposal
+      if (prev.disposalType === 2) fctx.clearRect(prev.dims.left, prev.dims.top, prev.dims.width, prev.dims.height);
+      else if (prev.disposalType === 3 && restore) fctx.putImageData(restore, 0, 0);
     }
-    return { thumb: drawToJpeg(decoded, 360, 0.75), full: drawToJpeg(decoded, 1280, 0.82), isGif: false };
+    if (f.disposalType === 3) restore = fctx.getImageData(0, 0, W, H);
+    patch.width = f.dims.width; patch.height = f.dims.height;
+    const img = pctx.createImageData(f.dims.width, f.dims.height);
+    img.data.set(f.patch);
+    pctx.putImageData(img, 0, 0);
+    fctx.drawImage(patch, f.dims.left, f.dims.top);
+    prev = f;
+    pendingDelay += f.delay || 100;
+    if (i % step !== 0 && i !== frames.length - 1) continue;   // 跳格時把時間累加給下一張
+    octx.fillStyle = '#fff'; octx.fillRect(0, 0, w, h);
+    octx.drawImage(full, 0, 0, w, h);
+    const data = octx.getImageData(0, 0, w, h).data;
+    const palette = quantize(data, 256);
+    enc.writeFrame(applyPalette(data, palette), w, h, { palette, delay: pendingDelay });
+    pendingDelay = 0;
+    if (i % 4 === 0) { onProgress && onProgress(i / frames.length); await tick(); }
+  }
+  enc.finish();
+  return new Blob([enc.bytes()], { type: 'image/gif' });
+};
+
+// 選完檔案時先分析：能不能讀、指紋、是不是 GIF
+const analyzeFile = async file => {
+  try {
+    const { blob, type } = await readImageBlob(file);
+    const decoded = await decodeBlob(blob, type);
+    try {
+      return { ok: true, isGif: type === 'image/gif', hash: imageHash(decoded), big: type === 'image/gif' && blob.size > GIF_KEEP_BYTES };
+    } finally { decoded.done(); }
+  } catch (e) { return { ok: false, error: e.message }; }
+};
+
+// 真正上傳前把照片處理成 { thumb, full, isGif }
+const preparePhoto = async (file, onProgress) => {
+  const { blob, type, buf } = await readImageBlob(file);
+  const decoded = await decodeBlob(blob, type);
+  try {
+    if (type === 'image/gif') {
+      if (blob.size > GIF_INPUT_MAX) throw new Error('gif-too-big');
+      let gifBlob = blob;
+      if (blob.size > GIF_KEEP_BYTES) {
+        // 依序嘗試：480px → 360px 每兩格取一格 → 280px 每三格取一格
+        for (const [side, step] of [[480, 1], [360, 2], [280, 3]]) {
+          gifBlob = await shrinkGif(buf, side, step, onProgress);
+          if (gifBlob.size <= GIF_KEEP_BYTES) break;
+        }
+        if (gifBlob.size > GIF_KEEP_BYTES) throw new Error('gif-shrink-failed');
+      }
+      const full = await blobToDataURL(gifBlob);
+      return { thumb: gifBlob.size <= GIF_THUMB_BYTES ? full : drawToJpeg(decoded, 360, 0.75), full, isGif: true, hash: imageHash(decoded) };
+    }
+    return { thumb: drawToJpeg(decoded, 360, 0.75), full: drawToJpeg(decoded, 1280, 0.82), isGif: false, hash: imageHash(decoded) };
   } finally { decoded.done(); }
 };
 
@@ -3535,9 +3726,14 @@ const deletePhoto = async (dramaId, photo) => {
     ...Array.from({ length: parts }, (_, i) => deleteDoc(doc(db, 'dramas', dramaId, 'photoFull', i === 0 ? photo.id : `${photo.id}__${i}`))),
   ]);
 };
-const UPLOAD_ERRORS = {
-  'unsupported':  '格式不支援（例如 HEIC，請先轉成 JPG）',
-  'gif-too-big':  'GIF 超過 10MB',
+const uploadErrorText = code => {
+  if (!code) return '上傳失敗';
+  if (code === 'unreadable')        return '讀不到檔案（可能還在雲端相簿，請先下載到手機）';
+  if (code === 'heic-failed')       return 'HEIC 轉檔失敗';
+  if (code === 'gif-too-big')       return 'GIF 超過 60MB';
+  if (code === 'gif-shrink-failed') return 'GIF 壓縮後還是太大';
+  if (code.startsWith('unsupported:')) return `瀏覽器讀不了這個格式（${code.slice(12)}）`;
+  return '上傳失敗';
 };
 
 // 有集數的依集數排，沒集數的排後面，同集再依新增時間
@@ -3556,40 +3752,125 @@ const sortPhotos = list => [...list].sort((a, b) => {
   return byEpisode(a, b);
 });
 
-function AlbumUploadSheet({ files, onClose, onUpload }) {
-  const [previews, setPreviews] = useState([]);
+function AlbumUploadSheet({ dramaId, files, existing, onClose, onUpload }) {
+  const [items, setItems] = useState(() => files.map(f => ({ file: f, url: URL.createObjectURL(f), status: 'checking', include: true })));
   const [tag, setTag] = useState('劇照');
   const [ep, setEp] = useState('');
   const [caption, setCaption] = useState('');
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(null);
+  const [finished, setFinished] = useState(false);
 
+  useEffect(() => () => items.forEach(it => URL.revokeObjectURL(it.url)), []);
+
+  // 選完檔案先檢查：讀不讀得到、有沒有跟相簿裡（或這次選的）重複
   useEffect(() => {
-    const urls = files.map(f => URL.createObjectURL(f));
-    setPreviews(urls);
-    return () => urls.forEach(u => URL.revokeObjectURL(u));
-  }, [files]);
+    let cancelled = false;
+    (async () => {
+      const known = [];
+      for (const p of existing) {
+        let h = p.hash;
+        if (!h && p.thumb) {
+          h = await hashFromDataURL(p.thumb);
+          if (h) updateDoc(doc(db, 'dramas', dramaId, 'photos', p.id), { hash: h }).catch(() => {});  // 舊照片補上指紋
+        }
+        if (h) known.push(h);
+      }
+      for (let i = 0; i < files.length; i++) {
+        if (cancelled) return;
+        const r = await analyzeFile(files[i]);
+        let patch;
+        if (!r.ok) patch = { status: 'error', error: r.error, include: false };
+        else {
+          const dupAlbum = known.some(h => hashDistance(h, r.hash) <= DUP_DISTANCE);
+          patch = dupAlbum
+            ? { status: 'dup', include: false, isGif: r.isGif, big: r.big }
+            : { status: 'ok', include: true, isGif: r.isGif, big: r.big };
+          known.push(r.hash);   // 這次選的照片之間也會互相比對
+        }
+        setItems(list => list.map((it, j) => (j === i ? { ...it, ...patch } : it)));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const checking = items.some(it => it.status === 'checking');
+  const chosen = items.filter(it => it.include && (it.status === 'ok' || it.status === 'dup'));
+  const dupCount = items.filter(it => it.status === 'dup').length;
+  const errCount = items.filter(it => it.status === 'error').length;
+  const bigGif = chosen.some(it => it.big);
+
+  const toggle = i => !busy && setItems(list => list.map((it, j) =>
+    j === i && (it.status === 'ok' || it.status === 'dup') ? { ...it, include: !it.include } : it));
 
   const submit = async () => {
     setBusy(true);
-    try { await onUpload({ tag, ep: String(ep).trim(), caption: caption.trim() }); onClose(); }
-    finally { setBusy(false); }
+    try {
+      const fails = await onUpload(chosen.map(it => it.file), { tag, ep: String(ep).trim(), caption: caption.trim() }, setProgress);
+      if (!fails.length) { onClose(); return; }
+      // 失敗的留在畫面上，顯示原因
+      setItems(list => list.map(it => {
+        const f = fails.find(x => x.file === it.file);
+        if (f) return { ...it, status: 'error', error: f.error, include: false };
+        return chosen.includes(it) ? { ...it, status: 'done', include: false } : it;
+      }));
+      setFinished(true);
+    } finally { setBusy(false); setProgress(null); }
   };
+
+  const badge = it => ({
+    checking: ['檢查中', ''],
+    dup:      [it.include ? '重複・仍上傳' : '重複・略過', 'dup'],
+    error:    ['無法上傳', 'err'],
+    done:     ['已上傳', 'done'],
+    ok:       [it.include ? (it.big ? 'GIF 會壓縮' : it.isGif ? 'GIF' : '') : '略過', it.include ? '' : 'skip'],
+  }[it.status]);
+
+  const btnText = busy
+    ? (progress?.gif != null ? `壓縮 GIF 中 ${Math.round(progress.gif * 100)}%…` : `上傳中 ${progress ? progress.done + 1 : 1}/${chosen.length}…`)
+    : checking ? '檢查中…' : `上傳 ${chosen.length} 張`;
+
+  const errorReasons = [...new Set(items.filter(it => it.status === 'error').map(it => uploadErrorText(it.error)))];
 
   return React.createElement('div', { className: 'modal-overlay', style: { zIndex: 420 }, onClick: e => e.target === e.currentTarget && !busy && onClose() },
     React.createElement('div', { className: 'modal' },
       React.createElement('div', { className: 'modal-header' },
-        React.createElement('div', { className: 'modal-title' }, `新增 ${files.length} 張照片`),
+        React.createElement('div', { className: 'modal-title' }, finished ? '上傳結果' : `新增 ${files.length} 張照片`),
         React.createElement('button', { className: 'modal-close', onClick: onClose, disabled: busy }, '✕')
       ),
-      React.createElement('div', { className: 'album-sheet-previews' },
-        previews.map((u, i) => React.createElement('img', { key: i, src: u, alt: '' }))
+      React.createElement('div', { className: 'album-sheet-grid' },
+        items.map((it, i) => {
+          const [label, cls] = badge(it);
+          return React.createElement('button', {
+            key: i, type: 'button',
+            className: 'album-sheet-item' + (it.include || it.status === 'done' ? '' : ' off'),
+            onClick: () => toggle(i), disabled: busy || it.status === 'error' || it.status === 'checking' || it.status === 'done',
+            title: it.file.name
+          },
+            it.status === 'error'
+              ? React.createElement('div', { className: 'album-sheet-broken' },
+                  React.createElement('i', { className: 'ph-duotone ph-image-broken' }),
+                  React.createElement('span', null, it.file.name))
+              : React.createElement('img', { src: it.url, alt: '' }),
+            label && React.createElement('span', { className: 'album-sheet-badge ' + cls }, label)
+          );
+        })
       ),
-      React.createElement('div', { className: 'form-grid' },
+      (dupCount > 0 || errCount > 0) && React.createElement('div', { className: 'album-sheet-notes' },
+        dupCount > 0 && !finished && React.createElement('div', null,
+          React.createElement('i', { className: 'ph-duotone ph-copy' }),
+          ` 有 ${dupCount} 張跟相簿裡的照片重複，預設略過；點一下可以改成照樣上傳。`),
+        errCount > 0 && React.createElement('div', { className: 'err' },
+          React.createElement('i', { className: 'ph-duotone ph-warning' }),
+          ` ${errCount} 張無法上傳：${errorReasons.join('、')}`)
+      ),
+      bigGif && !finished && React.createElement('div', { className: 'album-sheet-notes' },
+        React.createElement('div', null, React.createElement('i', { className: 'ph-duotone ph-film-strip' }),
+          ' 超過 6MB 的 GIF 會自動縮小再存，動畫會保留，處理要等一下下。')),
+      !finished && React.createElement('div', { className: 'form-grid' },
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '分類'),
-          React.createElement('div', { className: 'album-tag-pick' },
-            ALBUM_TAGS.map(t => React.createElement('button', { key: t, type: 'button', className: 'album-chip' + (tag === t ? ' active' : ''), onClick: () => setTag(t) }, t))
-          )
+          React.createElement(AlbumTagPicker, { value: tag, onChange: setTag, tags: allAlbumTags(existing) })
         ),
         React.createElement('div', { className: 'form-group' },
           React.createElement('label', null, '第幾集（選填）'),
@@ -3601,14 +3882,18 @@ function AlbumUploadSheet({ files, onClose, onUpload }) {
         )
       ),
       React.createElement('div', { className: 'form-actions' },
-        React.createElement('button', { className: 'btn-secondary', onClick: onClose, disabled: busy }, '取消'),
-        React.createElement('button', { className: 'btn-primary', disabled: busy, onClick: submit }, busy ? '上傳中…' : '上傳')
+        finished
+          ? React.createElement('button', { className: 'btn-primary', onClick: onClose }, '關閉')
+          : React.createElement(React.Fragment, null,
+              React.createElement('button', { className: 'btn-secondary', onClick: onClose, disabled: busy }, '取消'),
+              React.createElement('button', { className: 'btn-primary', disabled: busy || checking || !chosen.length, onClick: submit }, btnText)
+            )
       )
     )
   );
 }
 
-function AlbumViewer({ dramaId, photos, startIndex, onClose, showToast }) {
+function AlbumViewer({ dramaId, photos, allTags, startIndex, onClose, showToast }) {
   const [idx, setIdx] = useState(startIndex);
   const [fullSrc, setFullSrc] = useState({});
   const [editing, setEditing] = useState(false);
@@ -3682,9 +3967,7 @@ function AlbumViewer({ dramaId, photos, startIndex, onClose, showToast }) {
     React.createElement('div', { className: 'album-viewer-info' },
       editing
         ? React.createElement('div', { className: 'album-viewer-edit' },
-            React.createElement('div', { className: 'album-tag-pick' },
-              ALBUM_TAGS.map(t => React.createElement('button', { key: t, className: 'album-chip' + (form.tag === t ? ' active' : ''), onClick: () => setForm(f => ({ ...f, tag: t })) }, t))
-            ),
+            React.createElement(AlbumTagPicker, { value: form.tag, onChange: t => setForm(f => ({ ...f, tag: t })), tags: allTags || allAlbumTags(photos) }),
             React.createElement('input', { className: 'form-input', type: 'number', inputMode: 'numeric', value: form.ep, placeholder: '第幾集', onChange: e => setForm(f => ({ ...f, ep: e.target.value })) }),
             React.createElement('input', { className: 'form-input', value: form.caption, placeholder: '備註', onChange: e => setForm(f => ({ ...f, caption: e.target.value })) }),
             React.createElement('button', { className: 'btn-primary', onClick: saveEdit }, '儲存')
@@ -3719,27 +4002,31 @@ function DramaAlbum({ dramaId, showToast }) {
     return unsub;
   }, [dramaId]);
 
-  const upload = async ({ tag, ep, caption }) => {
+  // 回傳失敗清單 [{ file, error }]
+  const upload = async (files, { tag, ep, caption }, setProgress) => {
     let ok = 0; const fails = [];
     // 已經手動排過序的話，新照片接在最後面
     const orders = (photos || []).map(p => p.order).filter(o => typeof o === 'number');
     let nextOrder = orders.length ? Math.max(...orders) + 1 : null;
-    for (const file of pending) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setProgress({ done: i, gif: null });
       try {
-        const { thumb, full, isGif } = await preparePhoto(file);
+        const { thumb, full, isGif, hash } = await preparePhoto(file, pct => setProgress({ done: i, gif: pct }));
+        setProgress({ done: i, gif: null });
         const ref = doc(collection(db, 'dramas', dramaId, 'photos'));
         const parts = await saveFull(dramaId, ref.id, full);
-        const meta = { thumb, tag, ep, caption, isGif, parts, createdAt: serverTimestamp() };
+        const meta = { thumb, tag, ep, caption, isGif, parts, hash, createdAt: serverTimestamp() };
         if (nextOrder !== null) meta.order = nextOrder++;
         await setDoc(ref, meta);
         ok++;
       } catch (e) {
         console.error('上傳失敗', file.name, file.type, file.size, e);
-        fails.push(UPLOAD_ERRORS[e.message] || '上傳失敗');
+        fails.push({ file, error: e.message });
       }
     }
-    if (!fails.length) showToast && showToast(`已新增 ${ok} 張`);
-    else showToast && showToast(`新增 ${ok} 張，${fails.length} 張失敗：${[...new Set(fails)].join('、')}`);
+    showToast && showToast(fails.length ? `新增 ${ok} 張，${fails.length} 張失敗` : `已新增 ${ok} 張`);
+    return fails;
   };
 
   const startSort = () => { setDraft(photos || []); setPicked(null); setSorting(true); setFilter('全部'); };
@@ -3764,7 +4051,7 @@ function DramaAlbum({ dramaId, showToast }) {
   const list = all.filter(p => filter === '全部' || p.tag === filter);
   const LIMIT = 9;
   const shown = showAll ? list : list.slice(0, LIMIT);
-  const usedTags = ALBUM_TAGS.filter(t => all.some(p => p.tag === t));
+  const usedTags = allAlbumTags(all).filter(t => all.some(p => p.tag === t));
 
   return React.createElement('div', { className: 'album-section' },
     React.createElement('div', { className: 'album-head' },
@@ -3827,10 +4114,11 @@ function DramaAlbum({ dramaId, showToast }) {
             list.length > LIMIT && React.createElement('button', { className: 'btn-secondary album-more', onClick: () => setShowAll(v => !v) },
               showAll ? '收起' : `查看全部 ${list.length} 張`)
           ),
-    pending && React.createElement(AlbumUploadSheet, { files: pending, onClose: () => setPending(null), onUpload: upload }),
-    viewIdx !== null && React.createElement(AlbumViewer, { dramaId, photos: list, startIndex: viewIdx, onClose: () => setViewIdx(null), showToast })
+    pending && React.createElement(AlbumUploadSheet, { dramaId, files: pending, existing: photos || [], onClose: () => setPending(null), onUpload: upload }),
+    viewIdx !== null && React.createElement(AlbumViewer, { dramaId, photos: list, allTags: allAlbumTags(all), startIndex: viewIdx, onClose: () => setViewIdx(null), showToast })
   );
 }
+
 function DramaDetail({ item, onClose, onEdit, onPerson, showToast }) {
   const scrollRef = React.useRef(null);
   const [imgOpacity, setImgOpacity] = useState(1);
